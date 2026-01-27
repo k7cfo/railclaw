@@ -8,8 +8,11 @@ import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
 
-// Railway commonly sets PORT=8080 for HTTP services.
-const PORT = Number.parseInt(process.env.PORT ?? "8080", 10);
+// Railway deployments sometimes inject PORT=3000 by default. We want the wrapper to
+// reliably listen on 8080 unless explicitly overridden.
+//
+// Prefer CLAWDBOT_PUBLIC_PORT (set in the Dockerfile / template) over PORT.
+const PORT = Number.parseInt(process.env.CLAWDBOT_PUBLIC_PORT ?? process.env.PORT ?? "8080", 10);
 const STATE_DIR = process.env.CLAWDBOT_STATE_DIR?.trim() || path.join(os.homedir(), ".clawdbot");
 const WORKSPACE_DIR = process.env.CLAWDBOT_WORKSPACE_DIR?.trim() || path.join(STATE_DIR, "workspace");
 

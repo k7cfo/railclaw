@@ -62,6 +62,8 @@ RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /clawdbot/dist/entry.js "$@"'
 
 COPY src ./src
 
+# The wrapper listens on this port.
+ENV CLAWDBOT_PUBLIC_PORT=8080
 ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "src/server.js"]
