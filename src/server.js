@@ -264,6 +264,47 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
       &nbsp;|&nbsp;
       <a href="/setup/export" target="_blank">Download backup (.tar.gz)</a>
     </div>
+
+    <div style="margin-top: 0.75rem">
+      <div class="muted" style="margin-bottom:0.25rem"><strong>Import backup</strong> (advanced): restores into <code>/data</code> and restarts the gateway.</div>
+      <input id="importFile" type="file" accept=".tar.gz,application/gzip" />
+      <button id="importRun" style="background:#7c2d12; margin-top:0.5rem">Import</button>
+      <pre id="importOut" style="white-space:pre-wrap"></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Debug console</h2>
+    <p class="muted">Run a small allowlist of safe commands (no shell). Useful for debugging and recovery.</p>
+
+    <div style="display:flex; gap:0.5rem; align-items:center">
+      <select id="consoleCmd" style="flex: 1">
+        <option value="gateway.restart">gateway.restart (wrapper-managed)</option>
+        <option value="gateway.stop">gateway.stop (wrapper-managed)</option>
+        <option value="gateway.start">gateway.start (wrapper-managed)</option>
+        <option value="openclaw.status">openclaw status</option>
+        <option value="openclaw.health">openclaw health</option>
+        <option value="openclaw.doctor">openclaw doctor</option>
+        <option value="openclaw.logs.tail">openclaw logs --tail N</option>
+        <option value="openclaw.config.get">openclaw config get &lt;path&gt;</option>
+        <option value="openclaw.version">openclaw --version</option>
+      </select>
+      <input id="consoleArg" placeholder="Optional arg (e.g. 200, gateway.port)" style="flex: 1" />
+      <button id="consoleRun" style="background:#0f172a">Run</button>
+    </div>
+    <pre id="consoleOut" style="white-space:pre-wrap"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Config editor (advanced)</h2>
+    <p class="muted">Edits the full config file on disk (JSON5). Saving creates a timestamped <code>.bak-*</code> backup and restarts the gateway.</p>
+    <div class="muted" id="configPath"></div>
+    <textarea id="configText" style="width:100%; height: 260px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;"></textarea>
+    <div style="margin-top:0.5rem">
+      <button id="configReload" style="background:#1f2937">Reload</button>
+      <button id="configSave" style="background:#111; margin-left:0.5rem">Save</button>
+    </div>
+    <pre id="configOut" style="white-space:pre-wrap"></pre>
   </div>
 
   <div class="card">
@@ -604,6 +645,133 @@ app.get("/setup/api/debug", requireSetupAuth, async (_req, res) => {
   });
 });
 
+// --- Debug console (Option A: allowlisted commands + config editor) ---
+
+function redactSecrets(text) {
+  if (!text) return text;
+  // Very small best-effort redaction. (Config paths/values may still contain secrets.)
+  return String(text)
+    .replace(/(sk-[A-Za-z0-9_-]{10,})/g, "[REDACTED]")
+    .replace(/(gho_[A-Za-z0-9_]{10,})/g, "[REDACTED]")
+    .replace(/(xox[baprs]-[A-Za-z0-9-]{10,})/g, "[REDACTED]")
+    .replace(/(AA[A-Za-z0-9_-]{10,}:\S{10,})/g, "[REDACTED]");
+}
+
+const ALLOWED_CONSOLE_COMMANDS = new Set([
+  // Wrapper-managed lifecycle
+  "gateway.restart",
+  "gateway.stop",
+  "gateway.start",
+
+  // OpenClaw CLI helpers
+  "openclaw.version",
+  "openclaw.status",
+  "openclaw.health",
+  "openclaw.doctor",
+  "openclaw.logs.tail",
+  "openclaw.config.get",
+]);
+
+app.post("/setup/api/console/run", requireSetupAuth, async (req, res) => {
+  const payload = req.body || {};
+  const cmd = String(payload.cmd || "").trim();
+  const arg = String(payload.arg || "").trim();
+
+  if (!ALLOWED_CONSOLE_COMMANDS.has(cmd)) {
+    return res.status(400).json({ ok: false, error: "Command not allowed" });
+  }
+
+  try {
+    if (cmd === "gateway.restart") {
+      await restartGateway();
+      return res.json({ ok: true, output: "Gateway restarted (wrapper-managed).\n" });
+    }
+    if (cmd === "gateway.stop") {
+      if (gatewayProc) {
+        try { gatewayProc.kill("SIGTERM"); } catch {}
+        await sleep(750);
+        gatewayProc = null;
+      }
+      return res.json({ ok: true, output: "Gateway stopped (wrapper-managed).\n" });
+    }
+    if (cmd === "gateway.start") {
+      const r = await ensureGatewayRunning();
+      return res.json({ ok: Boolean(r.ok), output: r.ok ? "Gateway started.\n" : `Gateway not started: ${r.reason}\n` });
+    }
+
+    if (cmd === "openclaw.version") {
+      const r = await runCmd(OPENCLAW_NODE, clawArgs(["--version"]));
+      return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
+    }
+    if (cmd === "openclaw.status") {
+      const r = await runCmd(OPENCLAW_NODE, clawArgs(["status"]));
+      return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
+    }
+    if (cmd === "openclaw.health") {
+      const r = await runCmd(OPENCLAW_NODE, clawArgs(["health"]));
+      return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
+    }
+    if (cmd === "openclaw.doctor") {
+      const r = await runCmd(OPENCLAW_NODE, clawArgs(["doctor"]));
+      return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
+    }
+    if (cmd === "openclaw.logs.tail") {
+      const lines = Math.max(50, Math.min(1000, Number.parseInt(arg || "200", 10) || 200));
+      const r = await runCmd(OPENCLAW_NODE, clawArgs(["logs", "--tail", String(lines)]));
+      return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
+    }
+    if (cmd === "openclaw.config.get") {
+      if (!arg) return res.status(400).json({ ok: false, error: "Missing config path" });
+      const r = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", arg]));
+      return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
+    }
+
+    return res.status(400).json({ ok: false, error: "Unhandled command" });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+app.get("/setup/api/config/raw", requireSetupAuth, async (_req, res) => {
+  try {
+    const p = configPath();
+    const exists = fs.existsSync(p);
+    const content = exists ? fs.readFileSync(p, "utf8") : "";
+    res.json({ ok: true, path: p, exists, content });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+app.post("/setup/api/config/raw", requireSetupAuth, async (req, res) => {
+  try {
+    const content = String((req.body && req.body.content) || "");
+    if (content.length > 500_000) {
+      return res.status(413).json({ ok: false, error: "Config too large" });
+    }
+
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+
+    const p = configPath();
+    // Backup
+    if (fs.existsSync(p)) {
+      const backupPath = `${p}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+      fs.copyFileSync(p, backupPath);
+    }
+
+    fs.writeFileSync(p, content, { encoding: "utf8", mode: 0o600 });
+
+    // Apply immediately.
+    if (isConfigured()) {
+      await restartGateway();
+    }
+
+    res.json({ ok: true, path: p });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
 app.post("/setup/api/pairing/approve", requireSetupAuth, async (req, res) => {
   const { channel, code } = req.body || {};
   if (!channel || !code) {
@@ -672,6 +840,95 @@ app.get("/setup/export", requireSetupAuth, async (_req, res) => {
   });
 
   stream.pipe(res);
+});
+
+function isUnderDir(p, root) {
+  const abs = path.resolve(p);
+  const r = path.resolve(root);
+  return abs === r || abs.startsWith(r + path.sep);
+}
+
+function looksSafeTarPath(p) {
+  if (!p) return false;
+  // tar paths always use / separators
+  if (p.startsWith("/") || p.startsWith("\\")) return false;
+  // windows drive letters
+  if (/^[A-Za-z]:[\\/]/.test(p)) return false;
+  // path traversal
+  if (p.split("/").includes("..")) return false;
+  return true;
+}
+
+async function readBodyBuffer(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    req.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error("payload too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+// Import a backup created by /setup/export.
+// This is intentionally limited to restoring into /data to avoid overwriting arbitrary host paths.
+app.post("/setup/import", requireSetupAuth, async (req, res) => {
+  try {
+    const dataRoot = "/data";
+    if (!isUnderDir(STATE_DIR, dataRoot) || !isUnderDir(WORKSPACE_DIR, dataRoot)) {
+      return res
+        .status(400)
+        .type("text/plain")
+        .send("Import is only supported when OPENCLAW_STATE_DIR and OPENCLAW_WORKSPACE_DIR are under /data (Railway volume).\n");
+    }
+
+    // Stop gateway before restore so we don't overwrite live files.
+    if (gatewayProc) {
+      try { gatewayProc.kill("SIGTERM"); } catch {}
+      await sleep(750);
+      gatewayProc = null;
+    }
+
+    const buf = await readBodyBuffer(req, 250 * 1024 * 1024); // 250MB max
+    if (!buf.length) return res.status(400).type("text/plain").send("Empty body\n");
+
+    // Extract into /data.
+    // We only allow safe relative paths, and we intentionally do NOT delete existing files.
+    // (Users can reset/redeploy or manually clean the volume if desired.)
+    const tmpPath = path.join(os.tmpdir(), `openclaw-import-${Date.now()}.tar.gz`);
+    fs.writeFileSync(tmpPath, buf);
+
+    await tar.x({
+      file: tmpPath,
+      cwd: dataRoot,
+      gzip: true,
+      strict: true,
+      onwarn: () => {},
+      filter: (p) => {
+        // Allow only paths that look safe.
+        return looksSafeTarPath(p);
+      },
+    });
+
+    try { fs.rmSync(tmpPath, { force: true }); } catch {}
+
+    // Restart gateway after restore.
+    if (isConfigured()) {
+      await restartGateway();
+    }
+
+    res.type("text/plain").send("OK - imported backup into /data and restarted gateway.\n");
+  } catch (err) {
+    console.error("[import]", err);
+    res.status(500).type("text/plain").send(String(err));
+  }
 });
 
 // Proxy everything else to the gateway.
