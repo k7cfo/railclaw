@@ -29,9 +29,17 @@ A fork of `vignesh07/clawdbot-railway-template` that deploys OpenClaw on Railway
 - URL: `/setup` — username `admin`, password = `SETUP_PASSWORD` env var
 - Requires: AI provider API key, chat platform token (Telegram/Discord), then device pairing
 
+## FORCE_HTTPS_PROTO
+- The OpenClaw control UI requires HTTPS or localhost (secure context) for WebSocket
+- Accessing via plain HTTP through Tailscale triggers "disconnected (1008): control ui requires HTTPS or localhost"
+- Fix: `FORCE_HTTPS_PROTO=true` env var makes the wrapper set `X-Forwarded-Proto: https` when proxying to the gateway
+- Safe because Tailscale encrypts all traffic end-to-end
+- The setup script sets this automatically; manual users must add it to Railway Variables
+
 ## Known improvements needed
 - Streamline onboarding: allow pre-configuring AI provider keys and chat tokens via `.env` so the `/setup` wizard isn't required
 - The setup wizard flow requires manual steps (choose provider, enter tokens, pair device)
+- Consider adding Tailscale HTTPS (`tailscale serve`) for real TLS certs instead of `FORCE_HTTPS_PROTO`
 
 ## Credentials
 - Stored in `.env` (gitignored, never committed)
