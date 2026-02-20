@@ -30,17 +30,20 @@ Optional:
 - **Railway CLI** — `brew install railway`
 - **jq** — `brew install jq`
 
-## Automated setup
-
-Run the setup script:
+## Quick start
 
 ```bash
+cp .env.sample .env
+# Edit .env with your values (see "Required credentials" above)
 bash scripts/setup-private.sh
 ```
 
-The script automates steps 1-5 below. Step 4 (deploying the Tailscale subnet
+The script auto-sources `.env`, so no need to export manually.
+It automates steps 1-5 below. Step 4 (deploying the Tailscale subnet
 router template) requires one manual action in the Railway dashboard because
 Railway's CLI cannot deploy third-party templates.
+
+IMPORTANT: `.env` is in `.gitignore` — it will never be committed.
 
 ## Manual step-by-step (if the script fails or agent prefers API calls)
 

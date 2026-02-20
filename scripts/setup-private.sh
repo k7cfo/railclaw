@@ -17,6 +17,14 @@ set -euo pipefail
 #   OPENCLAW_GATEWAY_TOKEN — Gateway admin token (auto-generated if omitted)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Auto-source .env if present (from repo root or current dir)
+for envfile in "$(dirname "$0")/../.env" "./.env"; do
+  if [[ -f "$envfile" ]]; then
+    set -a; source "$envfile"; set +a
+    break
+  fi
+done
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
