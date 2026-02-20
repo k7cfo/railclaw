@@ -39,7 +39,6 @@ check_env() {
   local missing=()
   [[ -z "${TAILSCALE_API_KEY:-}" ]] && missing+=("TAILSCALE_API_KEY")
   [[ -z "${TAILSCALE_TAILNET:-}" ]] && missing+=("TAILSCALE_TAILNET")
-  [[ -z "${RAILWAY_TOKEN:-}" ]]     && missing+=("RAILWAY_TOKEN")
   [[ -z "${SETUP_PASSWORD:-}" ]]    && missing+=("SETUP_PASSWORD")
 
   if [[ ${#missing[@]} -gt 0 ]]; then
@@ -48,8 +47,20 @@ check_env() {
   Export them before running this script:
     export TAILSCALE_API_KEY=tskey-api-...
     export TAILSCALE_TAILNET=tail2749b6.ts.net
-    export RAILWAY_TOKEN=...
     export SETUP_PASSWORD=your-password-here"
+  fi
+
+  # Railway: prefer RAILWAY_TOKEN env var, but fall back to CLI login session.
+  # If RAILWAY_TOKEN is set and non-empty, export it so the CLI uses it.
+  # Otherwise, unset it and check if the CLI is already authenticated.
+  if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+    export RAILWAY_TOKEN
+  else
+    unset RAILWAY_TOKEN 2>/dev/null || true
+    if ! railway whoami >/dev/null 2>&1; then
+      fail "RAILWAY_TOKEN not set and Railway CLI not logged in.\n  Either set RAILWAY_TOKEN in .env or run: railway login"
+    fi
+    info "Using existing Railway CLI session (no RAILWAY_TOKEN needed)"
   fi
 }
 
@@ -119,32 +130,55 @@ deploy_railway() {
   local project_name="${PROJECT_NAME:-openclaw-private}"
 
   info "Creating Railway project: $project_name ..."
-  export RAILWAY_TOKEN
 
   # Create project
-  railway init --name "$project_name" 2>/dev/null || true
-  info "Project created/linked: $project_name"
+  if ! railway init --name "$project_name" 2>&1; then
+    fail "Failed to create Railway project. Check your Railway authentication."
+  fi
+  info "Project created: $project_name"
 
-  # Deploy from the fork
-  info "Deploying k7cfo/openclaw-railway-private to Railway..."
-  # Set variables first
+  # Add a service (required before setting variables or deploying)
+  info "Adding service to project..."
+  if ! railway add --service "$project_name" 2>&1; then
+    fail "Failed to add service to project."
+  fi
+  # Link to the new service
+  railway service "$project_name" 2>/dev/null || true
+  info "Service created and linked: $project_name"
+
+  # Set variables
+  info "Setting Railway variables..."
   local gw_token="${OPENCLAW_GATEWAY_TOKEN:-$(openssl rand -hex 32)}"
 
-  railway variable set \
+  if ! railway variable set \
     SETUP_PASSWORD="$SETUP_PASSWORD" \
     OPENCLAW_STATE_DIR="/data/.openclaw" \
     OPENCLAW_WORKSPACE_DIR="/data/workspace" \
     OPENCLAW_GATEWAY_TOKEN="$gw_token" \
-    PORT="8080" 2>/dev/null || true
-
+    PORT="8080" 2>&1; then
+    fail "Failed to set Railway variables."
+  fi
   info "Variables set. Gateway token saved."
 
+  # Attach volume at /data (required for persistent state)
+  info "Creating volume at /data..."
+  if ! railway volume add --mount-path /data 2>&1; then
+    warn "Volume creation failed (may already exist). Continuing..."
+  fi
+  info "Volume attached at /data"
+
   # Deploy
-  railway up --detach 2>/dev/null || true
-  info "Deployment triggered."
+  info "Deploying k7cfo/openclaw-railway-private to Railway..."
+  if ! railway up --detach 2>&1; then
+    fail "Failed to deploy. Check Railway logs."
+  fi
+  info "Deployment triggered. It may take 3-5 minutes to build."
 
   # Get service info
-  RAILWAY_SERVICE_NAME=$(railway status --json 2>/dev/null | jq -r '.service // "openclaw-private"' || echo "openclaw-private")
+  RAILWAY_SERVICE_NAME=$(railway status --json 2>/dev/null | jq -r '.service // empty' || true)
+  if [[ -z "$RAILWAY_SERVICE_NAME" ]]; then
+    RAILWAY_SERVICE_NAME="$project_name"
+  fi
   info "Service: $RAILWAY_SERVICE_NAME"
   info "Private domain: ${RAILWAY_SERVICE_NAME}.railway.internal:8080"
 }
