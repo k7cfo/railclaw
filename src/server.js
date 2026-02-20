@@ -1395,16 +1395,26 @@ const server = app.listen(PORT, BIND_HOST, async () => {
     console.warn("[wrapper] WARNING: SETUP_PASSWORD is not set; /setup will error.");
   }
 
-  // Seed AGENTS.md into the workspace on first boot so the AI model knows about
-  // Railway persistence rules (/data is the only persistent path).
-  // Users can edit or delete this file; it is only created if missing.
+  // Ensure the workspace AGENTS.md contains Railway persistence rules.
+  // OpenClaw's own bootstrap may create AGENTS.md first, so we append if the
+  // persistence section is missing rather than overwriting.
   const agentsMdPath = path.join(WORKSPACE_DIR, "AGENTS.md");
   const agentsMdTemplate = path.join("/app", "templates", "AGENTS.md");
+  const PERSISTENCE_MARKER = "# Railway Deployment";
   try {
-    if (!fs.existsSync(agentsMdPath) && fs.existsSync(agentsMdTemplate)) {
-      fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
-      fs.copyFileSync(agentsMdTemplate, agentsMdPath);
-      console.log(`[wrapper] seeded ${agentsMdPath} from template`);
+    fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+    if (fs.existsSync(agentsMdTemplate)) {
+      const templateContent = fs.readFileSync(agentsMdTemplate, "utf8");
+      if (!fs.existsSync(agentsMdPath)) {
+        fs.writeFileSync(agentsMdPath, templateContent, "utf8");
+        console.log(`[wrapper] seeded ${agentsMdPath} from template`);
+      } else {
+        const existing = fs.readFileSync(agentsMdPath, "utf8");
+        if (!existing.includes(PERSISTENCE_MARKER)) {
+          fs.appendFileSync(agentsMdPath, "\n\n" + templateContent, "utf8");
+          console.log(`[wrapper] appended persistence rules to ${agentsMdPath}`);
+        }
+      }
     }
   } catch (err) {
     console.warn(`[wrapper] failed to seed AGENTS.md: ${err}`);
@@ -1454,6 +1464,14 @@ server.on("upgrade", async (req, socket, head) => {
   } catch {
     socket.destroy();
     return;
+  }
+  // Rewrite Origin and proto headers directly on the incoming request so the
+  // gateway sees a secure origin. http-proxy forwards req.headers as-is for WS.
+  if (FORCE_HTTPS_PROTO) {
+    req.headers["x-forwarded-proto"] = "https";
+    if (req.headers.origin && req.headers.origin.startsWith("http://")) {
+      req.headers.origin = req.headers.origin.replace(/^http:\/\//, "https://");
+    }
   }
   proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
 });
