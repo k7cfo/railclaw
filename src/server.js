@@ -1350,8 +1350,11 @@ app.use(async (req, res) => {
   return proxy.web(req, res, { target: GATEWAY_TARGET });
 });
 
-const server = app.listen(PORT, "0.0.0.0", async () => {
-  console.log(`[wrapper] listening on :${PORT}`);
+// Bind to "::" (dual-stack) so Railway private networking (IPv6) works.
+// This allows access via Tailscale subnet router + .railway.internal domains.
+const BIND_HOST = process.env.BIND_HOST ?? "::";
+const server = app.listen(PORT, BIND_HOST, async () => {
+  console.log(`[wrapper] listening on ${BIND_HOST}:${PORT}`);
   console.log(`[wrapper] state dir: ${STATE_DIR}`);
   console.log(`[wrapper] workspace dir: ${WORKSPACE_DIR}`);
 

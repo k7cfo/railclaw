@@ -47,12 +47,59 @@ Then:
 - Complete setup
 - Visit `https://<your-app>.up.railway.app/` and `/openclaw`
 
+## Private access via Tailscale (no public internet exposure)
+
+This fork binds the wrapper to `::` (dual-stack IPv4+IPv6), which enables Railway's private networking. You can access your OpenClaw instance through a Tailscale subnet router **without exposing it to the public internet**.
+
+### Prerequisites
+
+- A [Tailscale account](https://tailscale.com) (free tier works)
+- Tailscale app installed on your devices
+
+### Setup steps
+
+**1. Generate a Tailscale auth key**
+- Go to [Tailscale Keys](https://login.tailscale.com/admin/settings/keys)
+- Click **Generate auth key**, add a description, click **Generate key**
+- Copy and save the key (you won't see it again)
+
+**2. Configure split DNS**
+- Go to [Tailscale DNS](https://login.tailscale.com/admin/dns)
+- Under **Nameservers**, click **Add Nameserver** → **Custom**
+- Nameserver: `fd12::10`
+- Enable **Restrict to domain**, enter `railway.internal`
+- Click **Save**
+
+**3. Deploy the Tailscale Subnet Router in Railway**
+- In your Railway project, click **Create** → **Template**
+- Search for **Tailscale Subnet Router** (by Railway Templates)
+- Set `TS_AUTHKEY` to the auth key from step 1
+- Deploy
+
+**4. Approve the subnet route**
+- Go to [Tailscale Machines](https://login.tailscale.com/admin/machines)
+- Find the new Railway machine, click **⋯** → **Edit route settings**
+- Enable `fd12::/16` and click **Save**
+
+**5. Remove the public domain (optional)**
+- In Railway, go to your service → **Settings** → **Networking**
+- Delete the `.up.railway.app` domain
+
+**6. Access privately**
+```bash
+curl http://<service-name>.railway.internal:8080
+# e.g. http://clawdbot-railway-template.railway.internal:8080/setup
+```
+
+All devices on your Tailscale tailnet can now reach your OpenClaw instance — no public internet exposure.
+
 ## Support / community
 
-- GitHub Issues: https://github.com/vignesh07/clawdbot-railway-template/issues
+- Upstream: https://github.com/vignesh07/clawdbot-railway-template
+- GitHub Issues: https://github.com/k7cfo/openclaw-railway-private/issues
 - Discord: https://discord.com/invite/clawd
 
-If you’re filing a bug, please include the output of:
+If you're filing a bug, please include the output of:
 - `/healthz`
 - `/setup/api/debug` (after authenticating to /setup)
 
