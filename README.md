@@ -45,7 +45,7 @@ Notes:
 Then:
 - Visit `https://<your-app>.up.railway.app/setup`
 - Log in with username **`admin`** and the password you set in `SETUP_PASSWORD`
-- Complete setup
+- Complete the setup wizard (see [Completing the setup wizard](#completing-the-setup-wizard) below)
 - Visit `https://<your-app>.up.railway.app/` and `/openclaw`
 
 ## Private access via Tailscale (no public internet exposure)
@@ -96,7 +96,24 @@ Log in to the setup wizard with:
 - **Username:** `admin`
 - **Password:** the `SETUP_PASSWORD` you set in your environment variables
 
+Complete the setup wizard (see [Completing the setup wizard](#completing-the-setup-wizard) below).
+
 All devices on your Tailscale tailnet can now reach your OpenClaw instance — no public internet exposure.
+
+## Completing the setup wizard
+
+After deploying and logging in to `/setup` (username `admin`, password = your `SETUP_PASSWORD`):
+
+1. **Choose an AI provider** — Select your LLM provider (e.g. Anthropic, OpenAI) and enter the API key.
+2. **Choose a chat platform** — Select Telegram, Discord, or both.
+   - For Telegram: paste the bot token from @BotFather (see [Getting chat tokens](#getting-chat-tokens-so-you-dont-have-to-scramble))
+   - For Discord: paste the bot token from the Developer Portal
+3. **Start the gateway** — The wizard will launch the OpenClaw gateway process.
+4. **Pair your device** — Open your chat platform and send a message to the bot. The first message triggers a pairing request. Go back to `/setup` and approve the device.
+
+Once paired, your bot is live. You can manage devices, view logs, and export backups from `/setup` at any time.
+
+> **Note:** This flow currently requires manual steps in the setup wizard. Improvements to streamline onboarding (e.g. pre-configuring tokens via `.env`) are planned.
 
 ## Support / community
 
