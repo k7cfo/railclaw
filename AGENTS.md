@@ -15,7 +15,7 @@ Before starting, the user MUST provide these as environment variables.
 
 | Variable | Where to get it | Description |
 |---|---|---|
-| `TAILSCALE_API_KEY` | [Tailscale Settings > Keys > API keys](https://login.tailscale.com/admin/settings/keys) | API access token (not an auth key). Click "Generate API key". |
+| `TAILSCALE_API_KEY` | [Tailscale Settings > Keys > API keys](https://login.tailscale.com/admin/settings/keys) | API access token (starts with `tskey-api-`). Scroll past "Auth keys" to "API keys" section. **Not** an auth key (`tskey-auth-`). |
 | `TAILSCALE_TAILNET` | [Tailscale General Settings](https://login.tailscale.com/admin/settings/general) | Tailnet ID, tailnet name, or `-` to auto-detect from API key. |
 | `RAILWAY_TOKEN` | [Railway Account > Tokens](https://railway.com/account/tokens) | Account-level API token. Click "Create Token". |
 | `SETUP_PASSWORD` | User chooses | Password to protect the `/setup` wizard. Any string. |
