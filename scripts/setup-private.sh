@@ -155,6 +155,7 @@ deploy_railway() {
     OPENCLAW_STATE_DIR="/data/.openclaw" \
     OPENCLAW_WORKSPACE_DIR="/data/workspace" \
     OPENCLAW_GATEWAY_TOKEN="$gw_token" \
+    FORCE_HTTPS_PROTO="true" \
     PORT="8080" 2>&1; then
     fail "Failed to set Railway variables."
   fi

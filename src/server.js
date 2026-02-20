@@ -1306,12 +1306,27 @@ app.post("/setup/import", requireSetupAuth, async (req, res) => {
   }
 });
 
+// When accessed via Tailscale (encrypted tunnel) over plain HTTP, the OpenClaw control UI
+// rejects WebSocket connections because X-Forwarded-Proto is "http" (not a secure context).
+// Setting FORCE_HTTPS_PROTO=true tells the wrapper to advertise "https" to the gateway,
+// which is legitimate since Tailscale encrypts all traffic end-to-end.
+const FORCE_HTTPS_PROTO = /^(true|1|yes)$/i.test(process.env.FORCE_HTTPS_PROTO ?? "");
+
 // Proxy everything else to the gateway.
 const proxy = httpProxy.createProxyServer({
   target: GATEWAY_TARGET,
   ws: true,
   xfwd: true,
 });
+
+if (FORCE_HTTPS_PROTO) {
+  proxy.on("proxyReq", (_proxyReq, req) => {
+    _proxyReq.setHeader("x-forwarded-proto", "https");
+  });
+  proxy.on("proxyReqWs", (_proxyReq) => {
+    _proxyReq.setHeader("x-forwarded-proto", "https");
+  });
+}
 
 proxy.on("error", (err, _req, res) => {
   console.error("[proxy]", err);

@@ -82,11 +82,16 @@ This fork binds the wrapper to `::` (dual-stack IPv4+IPv6), which enables Railwa
 - Find the new Railway machine, click **⋯** → **Edit route settings**
 - Enable `fd12::/16` and click **Save**
 
-**5. Remove the public domain (optional)**
+**5. Enable HTTPS proto forwarding**
+- In Railway, go to your service → **Variables**
+- Add `FORCE_HTTPS_PROTO=true`
+- This tells the wrapper to advertise HTTPS to the gateway (Tailscale encrypts the tunnel, so this is safe). Without it, the OpenClaw dashboard will show a "requires HTTPS or localhost" error.
+
+**6. Remove the public domain (optional)**
 - In Railway, go to your service → **Settings** → **Networking**
 - Delete the `.up.railway.app` domain
 
-**6. Access privately**
+**7. Access privately**
 ```bash
 curl http://<service-name>.railway.internal:8080
 # e.g. http://openclaw-private.railway.internal:8080/setup
