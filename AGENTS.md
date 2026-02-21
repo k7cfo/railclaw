@@ -1,32 +1,32 @@
-# Agent Instructions — OpenClaw Private Deploy
+# Agent Instructions — OpenClaw Deploy
 
 This file instructs AI coding agents (Warp/Oz, Claude Code, Anti-Gravity, Cursor, etc.)
-how to deploy OpenClaw on Railway with fully private Tailscale networking.
+how to deploy OpenClaw on Railway with Cloudflare Tunnel.
 
 ## What this does
 
-Deploys a private OpenClaw AI assistant on Railway, accessible only through
-a Tailscale VPN — **no public internet exposure**.
+Deploys an OpenClaw AI assistant on Railway, securely exposed via a Cloudflare
+Tunnel on a custom domain (e.g. `openclaw.example.com`). Cloudflare handles
+TLS termination — no public ports or firewall holes needed.
 
 ## Required credentials
 
 Before starting, the user MUST provide these as environment variables.
 **Do not hardcode or echo secrets. Store them as env vars only.**
 
-| Variable | Where to get it | Description |
-|---|---|---|
-| `TAILSCALE_API_KEY` | [Tailscale Settings > Keys > API keys](https://login.tailscale.com/admin/settings/keys) | API access token (starts with `tskey-api-`). Scroll past "Auth keys" to "API keys" section. **Not** an auth key (`tskey-auth-`). |
-| `TAILSCALE_TAILNET` | [Tailscale General Settings](https://login.tailscale.com/admin/settings/general) | Tailnet ID, tailnet name, or `-` to auto-detect from API key. |
-| `RAILWAY_TOKEN` | [Railway Account > Tokens](https://railway.com/account/tokens) | Account-level API token. Click "Create Token". |
-| `SETUP_PASSWORD` | User chooses | Password to protect the `/setup` wizard. Any string. |
+- `CLOUDFLARE_API_TOKEN` — [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens) → Create Token. Needs: Cloudflare Tunnel:Edit, DNS:Edit, Account Settings:Read.
+- `CLOUDFLARE_ACCOUNT_ID` — [Cloudflare Dashboard](https://dash.cloudflare.com) → right sidebar on account home.
+- `CLOUDFLARE_HOSTNAME` — Public hostname (e.g. `openclaw.example.com`). Must be on a Cloudflare-managed domain.
+- `RAILWAY_TOKEN` — [Railway Account > Tokens](https://railway.com/account/tokens) → Create Token. Optional if `railway login` already done.
+- `SETUP_PASSWORD` — Password to protect the `/setup` wizard. Any string.
 
 Optional:
-- `PROJECT_NAME` — Railway project name (default: `openclaw-private`)
+- `PROJECT_NAME` — Railway project name (default: `openclaw`)
+- `CLOUDFLARE_ZONE_ID` — Auto-detected from hostname if omitted.
 - `OPENCLAW_GATEWAY_TOKEN` — Gateway admin token (auto-generated if not set)
 
 ## Prerequisites (install if missing)
 
-- **Tailscale app** — `brew install --cask tailscale` (macOS) — user must be logged in
 - **Railway CLI** — `brew install railway`
 - **jq** — `brew install jq`
 
@@ -35,56 +35,65 @@ Optional:
 ```bash
 cp .env.sample .env
 # Edit .env with your values (see "Required credentials" above)
-bash scripts/setup-private.sh
+bash scripts/setup-cloudflare.sh
 ```
 
 The script auto-sources `.env`, so no need to export manually.
-It automates steps 1-5 below. Step 4 (deploying the Tailscale subnet
-router template) requires one manual action in the Railway dashboard because
-Railway's CLI cannot deploy third-party templates.
+It automates: creating the Cloudflare Tunnel, configuring DNS, deploying
+OpenClaw to Railway, and outputting the tunnel token for the cloudflared sidecar.
+The cloudflared sidecar deployment requires one manual action in the Railway dashboard.
 
 IMPORTANT: `.env` is in `.gitignore` — it will never be committed.
 
 ## Manual step-by-step (if the script fails or agent prefers API calls)
 
-### Step 1: Create Tailscale auth key
+### Step 1: Create Cloudflare Tunnel
 
 ```bash
-curl -s -X POST "https://api.tailscale.com/api/v2/tailnet/$TAILSCALE_TAILNET/keys" \
-  -H "Authorization: Bearer $TAILSCALE_API_KEY" \
+# Generate tunnel secret
+TUNNEL_SECRET=$(openssl rand -base64 32)
+
+# Create tunnel
+curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "keyType": "auth",
-    "description": "railway-openclaw-subnet-router",
-    "capabilities": {
-      "devices": {
-        "create": {
-          "reusable": false,
-          "ephemeral": false,
-          "preauthorized": true
-        }
-      }
-    },
-    "expirySeconds": 86400
-  }'
+  -d "{\"name\": \"openclaw\", \"tunnel_secret\": \"$TUNNEL_SECRET\", \"config_src\": \"cloudflare\"}"
 ```
 
-Save the `key` field from the response as `TS_AUTHKEY`.
+Save `result.id` as `TUNNEL_ID`.
 
-### Step 2: Configure split DNS
+### Step 2: Configure tunnel ingress
 
 ```bash
-curl -s -X PUT "https://api.tailscale.com/api/v2/tailnet/$TAILSCALE_TAILNET/dns/split-dns" \
-  -H "Authorization: Bearer $TAILSCALE_API_KEY" \
+curl -s -X PUT "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID/configurations" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"railway.internal": ["fd12::10"]}'
+  -d '{"config": {"ingress": [{"hostname": "'"$CLOUDFLARE_HOSTNAME"'", "service": "http://openclaw.railway.internal:8080"}, {"service": "http_status:404"}]}}'
 ```
 
-### Step 3: Deploy OpenClaw to Railway
+### Step 3: Create DNS CNAME
+
+```bash
+curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type": "CNAME", "name": "'"$CLOUDFLARE_HOSTNAME"'", "content": "'"$TUNNEL_ID"'.cfargotunnel.com", "proxied": true}'
+```
+
+### Step 4: Get tunnel token
+
+```bash
+curl -s "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID/token" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+```
+
+Save `result` as `TUNNEL_TOKEN`.
+
+### Step 5: Deploy OpenClaw to Railway
 
 ```bash
 export RAILWAY_TOKEN
-railway init --name "${PROJECT_NAME:-openclaw-private}"
+railway init --name "${PROJECT_NAME:-openclaw}"
 railway variable set \
   SETUP_PASSWORD="$SETUP_PASSWORD" \
   OPENCLAW_STATE_DIR="/data/.openclaw" \
@@ -95,64 +104,34 @@ railway up --detach
 
 Important: The service source must be `k7cfo/openclaw-railway-private` (this fork),
 NOT the upstream `vignesh07/clawdbot-railway-template`. The upstream binds to
-`0.0.0.0` (IPv4 only) which breaks Railway private networking (IPv6).
+`*******` (IPv4 only) which breaks Railway private networking (IPv6).
 
-### Step 4: Deploy Tailscale Subnet Router (manual)
+### Step 6: Deploy cloudflared sidecar
 
 In the Railway dashboard:
 1. Open the project
-2. Click **Create → Template**
-3. Search **Tailscale Subnet Router** (by Railway Templates)
-4. Set `TS_AUTHKEY` to the auth key from Step 1
-5. Deploy
+2. Click **Create → New Service → Docker Image**
+3. Use image: `cloudflare/cloudflared:latest`
+4. Set start command: `tunnel --no-autoupdate run`
+5. Add variable: `TUNNEL_TOKEN=<token-from-step-4>`
 
-This cannot be automated via CLI because Railway doesn't support deploying
-third-party templates programmatically.
-
-### Step 5: Approve subnet routes
-
-Find the subnet router device and approve `fd12::/16`:
+### Step 7: Verify
 
 ```bash
-# List devices
-DEVICES=$(curl -s "https://api.tailscale.com/api/v2/tailnet/$TAILSCALE_TAILNET/devices" \
-  -H "Authorization: Bearer $TAILSCALE_API_KEY")
-
-# Find device advertising fd12::/16
-DEVICE_ID=$(echo "$DEVICES" | jq -r '
-  .devices[]
-  | select(.advertisedRoutes // [] | any(. == "fd12::/16"))
-  | .id
-' | head -1)
-
-# Approve route
-curl -s -X POST "https://api.tailscale.com/api/v2/device/$DEVICE_ID/routes" \
-  -H "Authorization: Bearer $TAILSCALE_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"routes": ["fd12::/16"]}'
+curl https://$CLOUDFLARE_HOSTNAME/setup
 ```
-
-### Step 6: Verify
-
-```bash
-curl --connect-timeout 10 http://<service-name>.railway.internal:8080
-```
-
-### Step 7: Remove public domain (optional)
-
-In Railway dashboard → service → Settings → Networking → delete the `.up.railway.app` domain.
 
 ## Key technical details
 
-- This fork binds the wrapper to `::` (dual-stack) instead of `0.0.0.0`
+- This fork binds the wrapper to `::` (dual-stack) instead of `*******`
 - Railway private networking uses IPv6 (`fd12::/16` range)
-- The wrapper listens on port 8080, proxying to the gateway on `127.0.0.1:18789`
-- Split DNS routes only `*.railway.internal` queries through the Tailscale tunnel
-- All other DNS on the user's devices works normally
+- The wrapper listens on port 8080, proxying to the gateway on `*********:18789`
+- Cloudflare terminates TLS and proxies to the cloudflared sidecar, which connects to OpenClaw via Railway internal network
+- Optional: Cloudflare Access policies for zero-trust authentication
 
 ## Troubleshooting
 
-- **DNS doesn't resolve**: Check that Tailscale app is running and connected
-- **Connection refused on IPv6**: Service isn't using this fork (binding to `0.0.0.0`)
-- **Connection timeout on IPv4**: Subnet route not approved, or Tailscale subnets not enabled in client
-- **502 from public URL**: Port mismatch — public domain must target port 8080
+- **Tunnel not connected**: Check that the cloudflared sidecar is running in Railway and has the correct `TUNNEL_TOKEN`
+- **DNS not resolving**: Verify the CNAME record exists in Cloudflare DNS for your hostname
+- **502 Bad Gateway**: OpenClaw service may still be building (takes 3-5 min), or port mismatch
+- **Connection refused on IPv6**: Service isn't using this fork (binding to `*******`)

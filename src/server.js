@@ -67,6 +67,39 @@ function resolveGatewayToken() {
 const OPENCLAW_GATEWAY_TOKEN = resolveGatewayToken();
 process.env.OPENCLAW_GATEWAY_TOKEN = OPENCLAW_GATEWAY_TOKEN;
 
+// Persistent extra env vars (e.g. BRAVE_API_KEY) saved by the setup wizard.
+// These live in STATE_DIR/extra-env.json and are loaded into process.env on startup
+// so the gateway process inherits them.
+const EXTRA_ENV_PATH = path.join(STATE_DIR, "extra-env.json");
+function loadExtraEnv() {
+  try {
+    if (fs.existsSync(EXTRA_ENV_PATH)) {
+      const vars = JSON.parse(fs.readFileSync(EXTRA_ENV_PATH, "utf8"));
+      for (const [k, v] of Object.entries(vars)) {
+        if (typeof v === "string" && v) process.env[k] = v;
+      }
+    }
+  } catch (err) {
+    console.warn(`[wrapper] failed to load extra env: ${err}`);
+  }
+}
+function saveExtraEnv(vars) {
+  let existing = {};
+  try {
+    if (fs.existsSync(EXTRA_ENV_PATH)) {
+      existing = JSON.parse(fs.readFileSync(EXTRA_ENV_PATH, "utf8"));
+    }
+  } catch { /* ignore */ }
+  const merged = { ...existing, ...vars };
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  fs.writeFileSync(EXTRA_ENV_PATH, JSON.stringify(merged, null, 2), { encoding: "utf8", mode: 0o600 });
+  // Also set in current process so the gateway picks them up on next (re)start.
+  for (const [k, v] of Object.entries(vars)) {
+    if (typeof v === "string" && v) process.env[k] = v;
+  }
+}
+loadExtraEnv();
+
 // Where the gateway will listen internally (we proxy to it).
 const INTERNAL_GATEWAY_PORT = Number.parseInt(process.env.INTERNAL_GATEWAY_PORT ?? "18789", 10);
 const INTERNAL_GATEWAY_HOST = process.env.INTERNAL_GATEWAY_HOST ?? "127.0.0.1";
@@ -460,7 +493,17 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   </div>
 
   <div class="card">
-    <h2>2) Optional: Channels</h2>
+    <h2>2) Brave Search API key (optional)</h2>
+    <p class="muted">Gives OpenClaw the ability to search the web. Without this, web search tools won't work.</p>
+    <label>Brave Search API key</label>
+    <input id="braveApiKey" type="password" placeholder="BSA..." />
+    <div class="muted" style="margin-top: 0.25rem">
+      Get it free: <a href="https://brave.com/search/api/" target="_blank">brave.com/search/api</a> → Get Started → Free plan (2,000 queries/mo)
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3) Optional: Chat platform</h2>
     <p class="muted">You can also add channels later inside OpenClaw, but this helps you get messaging working immediately.</p>
 
     <label>Telegram bot token (optional)</label>
@@ -484,7 +527,7 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   </div>
 
   <div class="card">
-    <h2>2b) Advanced: Custom OpenAI-compatible provider (optional)</h2>
+    <h2>3b) Advanced: Custom OpenAI-compatible provider (optional)</h2>
     <p class="muted">Use this to configure an OpenAI-compatible API that requires a custom base URL (e.g. Ollama, vLLM, LM Studio, hosted proxies). You usually set the API key as a Railway variable and reference it here.</p>
 
     <label>Provider id (e.g. ollama, deepseek, myproxy)</label>
@@ -507,7 +550,7 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   </div>
 
   <div class="card">
-    <h2>3) Run onboarding</h2>
+    <h2>4) Run onboarding</h2>
     <button id="run">Run setup</button>
     <button id="pairingApprove" style="background:#1f2937; margin-left:0.5rem">Approve pairing</button>
     <button id="reset" style="background:#444; margin-left:0.5rem">Reset setup</button>
@@ -752,7 +795,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(["*********"]) ]),
     );
 
-    // Allow Control UI over plain HTTP (Tailscale encrypts the tunnel).
+    // Allow Control UI over plain HTTP (Cloudflare Tunnel or internal access).
     // Without this, the browser's non-secure context blocks WebCrypto and the
     // gateway rejects the connection with "requires HTTPS or localhost".
     await runCmd(
@@ -867,6 +910,13 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         extra += `\n[slack config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
         extra += `\n[slack verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
       }
+    }
+
+    // Persist Brave Search API key (if provided) so the gateway can use web search.
+    if (payload.braveApiKey?.trim()) {
+      const key = payload.braveApiKey.trim();
+      saveExtraEnv({ BRAVE_API_KEY: key });
+      extra += `\n[brave] API key saved and will be available to the gateway.\n`;
     }
 
     // Apply changes immediately.
@@ -1325,10 +1375,10 @@ app.post("/setup/import", requireSetupAuth, async (req, res) => {
   }
 });
 
-// When accessed via Tailscale (encrypted tunnel) over plain HTTP, the OpenClaw control UI
+// When accessed over plain HTTP (e.g. Railway internal network), the OpenClaw control UI
 // rejects WebSocket connections because X-Forwarded-Proto is "http" (not a secure context).
-// Setting FORCE_HTTPS_PROTO=true tells the wrapper to advertise "https" to the gateway,
-// which is legitimate since Tailscale encrypts all traffic end-to-end.
+// Setting FORCE_HTTPS_PROTO=true tells the wrapper to advertise "https" to the gateway.
+// Railway's .up.railway.app domains already have TLS, so this is only needed for internal access.
 const FORCE_HTTPS_PROTO = /^(true|1|yes)$/i.test(process.env.FORCE_HTTPS_PROTO ?? "");
 
 // Proxy everything else to the gateway.
@@ -1341,7 +1391,7 @@ const proxy = httpProxy.createProxyServer({
 // When FORCE_HTTPS_PROTO is enabled, rewrite protocol-related headers so the
 // OpenClaw gateway believes the connection is HTTPS. This is necessary because
 // the gateway checks the Origin header on WebSocket upgrades and rejects non-
-// secure origins. Tailscale encrypts the tunnel, so this is safe.
+// secure origins. Railway provides TLS on .up.railway.app domains.
 function rewriteHttpsHeaders(proxyReq) {
   proxyReq.setHeader("x-forwarded-proto", "https");
   const origin = proxyReq.getHeader("origin");
@@ -1393,7 +1443,6 @@ app.use(async (req, res) => {
 });
 
 // Bind to "::" (dual-stack) so Railway private networking (IPv6) works.
-// This allows access via Tailscale subnet router + .railway.internal domains.
 const BIND_HOST = process.env.BIND_HOST ?? "::";
 const server = app.listen(PORT, BIND_HOST, async () => {
   console.log(`[wrapper] listening on ${BIND_HOST}:${PORT}`);
@@ -1460,7 +1509,7 @@ const server = app.listen(PORT, BIND_HOST, async () => {
     }
   }
 
-  // Ensure allowInsecureAuth is set for Tailscale/HTTP access (idempotent).
+  // Ensure allowInsecureAuth is set for HTTP access (idempotent).
   if (isConfigured()) {
     try {
       await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.controlUi.allowInsecureAuth", "true"]));

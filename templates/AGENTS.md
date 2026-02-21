@@ -1,34 +1,41 @@
-# Railway Deployment — Persistence Rules
+# OpenClaw Railway — Agent Deploy Instructions
 
-This OpenClaw instance runs on Railway with an ephemeral filesystem. **Only `/data` is persistent** (mounted as a Railway volume). Everything outside `/data` is wiped on every redeploy or restart.
+Deploy OpenClaw on Railway. No tunnels, no sidecars — Railway provides HTTPS.
 
-## What persists (under /data)
-- `/data/.openclaw` — OpenClaw config, credentials, state
-- `/data/workspace` — your workspace (this file lives here)
-- `/data/npm` — npm global packages (`npm install -g`)
-- `/data/pnpm` — pnpm global packages
-- `/data/pnpm-store` — pnpm content-addressable store
+## Prerequisites
+- Railway CLI installed (`brew install railway`)
+- `railway login` completed
+- `.env` file with `SETUP_PASSWORD` set
 
-## What does NOT persist
-- `apt-get install ...` (installs to `/usr/*`, wiped on redeploy)
-- Files written outside `/data`
-- Homebrew or system-level installs
+## Deploy steps
+1. `bash scripts/deploy.sh` — creates project, volume, sets env vars, deploys
+2. In Railway dashboard: **Settings → Networking → Generate Domain** to get HTTPS URL
+3. Visit `https://yourapp.up.railway.app/setup` (admin / SETUP_PASSWORD)
+4. Paste OpenAI API key, Brave Search API key, optional chat bot token
+5. Click **Run setup** → approve device pairing if using a chat bot
 
-## Rules for installing software
-1. **Python packages**: always use a venv under `/data`:
-   ```bash
-   python3 -m venv /data/venv
-   source /data/venv/bin/activate
-   pip install <package>
-   ```
-2. **Node packages**: `npm install -g <pkg>` already targets `/data/npm` (pre-configured via NPM_CONFIG_PREFIX)
-3. **pnpm packages**: `pnpm add -g <pkg>` already targets `/data/pnpm` (pre-configured via PNPM_HOME)
-4. **Custom scripts**: save them under `/data/workspace/`
-5. **Never** install via `apt-get` or write important files outside `/data`
+## Architecture
+- Wrapper server on port 8080, proxies to OpenClaw gateway on localhost:18789
+- Railway provides HTTPS via `.up.railway.app` domain
+- Volume at `/data` persists config, workspace, and API keys across redeploys
 
-## Bootstrap script
-If you need tools reinstalled on every restart, add commands to `/data/workspace/bootstrap.sh`. The wrapper runs this script automatically on startup.
+## Persistence rules
+**Only `/data` survives redeploys.** Everything else is wiped.
 
-## Updating OpenClaw
-To check your version: `openclaw --version`
-To update: the deployment owner rebuilds the Docker image with a newer `OPENCLAW_GIT_REF` tag and redeploys.
+- `/data/.openclaw` — config, credentials, state
+- `/data/workspace` — workspace files
+- `/data/npm`, `/data/pnpm` — global packages
+- `apt-get install` does NOT persist
+
+## Installing software
+1. **Python**: use a venv under `/data`
+2. **Node**: `npm install -g <pkg>` (targets `/data/npm` via NPM_CONFIG_PREFIX)
+3. **pnpm**: `pnpm add -g <pkg>` (targets `/data/pnpm` via PNPM_HOME)
+4. **Custom scripts**: save under `/data/workspace/`
+5. **Bootstrap**: add commands to `/data/workspace/bootstrap.sh` (runs on startup)
+
+## Env vars (set by deploy script)
+- `SETUP_PASSWORD` — admin password for `/setup` wizard
+- `OPENCLAW_STATE_DIR` = `/data/.openclaw`
+- `OPENCLAW_WORKSPACE_DIR` = `/data/workspace`
+- `PORT` = `8080`

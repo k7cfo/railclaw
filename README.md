@@ -1,252 +1,200 @@
-# OpenClaw Railway Template (1‑click deploy)
+# OpenClaw on Railway
 
-This repo packages **OpenClaw** for Railway with a small **/setup** web wizard so users can deploy and onboard **without running any commands**.
-
-## What you get
-
-- **OpenClaw Gateway + Control UI** (served at `/` and `/openclaw`)
-- A friendly **Setup Wizard** at `/setup` (protected by a password)
-- Persistent state via **Railway Volume** (so config/credentials/memory survive redeploys)
-- One-click **Export backup** (so users can migrate off Railway later)
-- **Import backup** from `/setup` (advanced recovery)
-
-## How it works (high level)
-
-- The container runs a wrapper web server.
-- The wrapper protects `/setup` with `SETUP_PASSWORD`.
-- During setup, the wrapper runs `openclaw onboard --non-interactive ...` inside the container, writes state to the volume, and then starts the gateway.
-- After setup, **`/` is OpenClaw**. The wrapper reverse-proxies all traffic (including WebSockets) to the local gateway process.
-
-## Railway deploy instructions (what you’ll publish as a Template)
-
-In Railway Template Composer:
-
-1) Create a new template from this GitHub repo.
-2) Add a **Volume** mounted at `/data`.
-3) Set the following variables:
-
-Required:
-- `SETUP_PASSWORD` — user-provided password to access `/setup`
-
-Recommended:
-- `OPENCLAW_STATE_DIR=/data/.openclaw`
-- `OPENCLAW_WORKSPACE_DIR=/data/workspace`
-
-Optional:
-- `OPENCLAW_GATEWAY_TOKEN` — if not set, the wrapper generates one (not ideal). In a template, set it using a generated secret.
-
-Notes:
-- This template pins OpenClaw to a released version by default via Docker build arg `OPENCLAW_GIT_REF` (override if you want `main`).
-
-4) Enable **Public Networking** (HTTP). Railway will assign a domain.
-   - This service listens on Railway’s injected `PORT` at runtime (recommended).
-5) Deploy.
-
-Then:
-- Visit `https://<your-app>.up.railway.app/setup`
-- Log in with username **`admin`** and the password you set in `SETUP_PASSWORD`
-- Complete the setup wizard (see [Completing the setup wizard](#completing-the-setup-wizard) below)
-- Visit `https://<your-app>.up.railway.app/` and `/openclaw`
-
-## Private access via Tailscale (no public internet exposure)
-
-This fork binds the wrapper to `::` (dual-stack IPv4+IPv6), which enables Railway's private networking. You can access your OpenClaw instance through a Tailscale subnet router **without exposing it to the public internet**.
-
-### Prerequisites
-
-- A [Tailscale account](https://tailscale.com) (free tier works)
-- Tailscale app installed on your devices
-
-### Setup steps
-
-**1. Generate a Tailscale auth key**
-- Go to [Tailscale Keys](https://login.tailscale.com/admin/settings/keys)
-- Click **Generate auth key**, add a description, click **Generate key**
-- Copy and save the key (you won't see it again)
-
-**2. Configure split DNS**
-- Go to [Tailscale DNS](https://login.tailscale.com/admin/dns)
-- Under **Nameservers**, click **Add Nameserver** → **Custom**
-- Nameserver: `fd12::10`
-- Enable **Restrict to domain**, enter `railway.internal`
-- Click **Save**
-
-**3. Deploy the Tailscale Subnet Router in Railway**
-- In your Railway project, click **Create** → **Template**
-- Search for **Tailscale Subnet Router** (by Railway Templates)
-- Set `TS_AUTHKEY` to the auth key from step 1
-- Deploy
-
-**4. Approve the subnet route**
-- Go to [Tailscale Machines](https://login.tailscale.com/admin/machines)
-- Find the new Railway machine, click **⋯** → **Edit route settings**
-- Enable `fd12::/16` and click **Save**
-
-**5. Enable HTTPS proto forwarding**
-- In Railway, go to your service → **Variables**
-- Add `FORCE_HTTPS_PROTO=true`
-- This tells the wrapper to advertise HTTPS to the gateway (Tailscale encrypts the tunnel, so this is safe). Without it, the OpenClaw dashboard will show a "requires HTTPS or localhost" error.
-
-**6. Remove the public domain (optional)**
-- In Railway, go to your service → **Settings** → **Networking**
-- Delete the `.up.railway.app` domain
-
-**7. Access privately**
-```bash
-curl http://<service-name>.railway.internal:8080
-# e.g. http://openclaw-private.railway.internal:8080/setup
-```
-
-Log in to the setup wizard with:
-- **Username:** `admin`
-- **Password:** the `SETUP_PASSWORD` you set in your environment variables
-
-Complete the setup wizard (see [Completing the setup wizard](#completing-the-setup-wizard) below).
-
-All devices on your Tailscale tailnet can now reach your OpenClaw instance — no public internet exposure.
-
-## Completing the setup wizard
-
-After deploying and logging in to `/setup` (username `admin`, password = your `SETUP_PASSWORD`):
-
-1. **Choose an AI provider** — Select your LLM provider (e.g. Anthropic, OpenAI) and enter the API key.
-2. **Choose a chat platform** — Select Telegram, Discord, or both.
-   - For Telegram: paste the bot token from @BotFather (see [Getting chat tokens](#getting-chat-tokens-so-you-dont-have-to-scramble))
-   - For Discord: paste the bot token from the Developer Portal
-3. **Start the gateway** — The wizard will launch the OpenClaw gateway process.
-4. **Pair your device** — Open your chat platform and send a message to the bot. The first message triggers a pairing request. Go back to `/setup` and approve the device.
-
-Once paired, your bot is live. You can manage devices, view logs, and export backups from `/setup` at any time.
-
-> **Note:** This flow currently requires manual steps in the setup wizard. Improvements to streamline onboarding (e.g. pre-configuring tokens via `.env`) are planned.
-
-## Support / community
-
-- Upstream: https://github.com/vignesh07/clawdbot-railway-template
-- GitHub Issues: https://github.com/k7cfo/openclaw-railway-private/issues
-- Discord: https://discord.com/invite/clawd
-
-If you're filing a bug, please include the output of:
-- `/healthz`
-- `/setup/api/debug` (after authenticating to /setup)
-
-## Getting chat tokens (so you don’t have to scramble)
-
-### Telegram bot token
-1) Open Telegram and message **@BotFather**
-2) Run `/newbot` and follow the prompts
-3) BotFather will give you a token that looks like: `123456789:AA...`
-4) Paste that token into `/setup`
-
-### Discord bot token
-1) Go to the Discord Developer Portal: https://discord.com/developers/applications
-2) **New Application** → pick a name
-3) Open the **Bot** tab → **Add Bot**
-4) Copy the **Bot Token** and paste it into `/setup`
-5) Invite the bot to your server (OAuth2 URL Generator → scopes: `bot`, `applications.commands`; then choose permissions)
-
-## Persistence (Railway volume)
-
-Railway containers have an ephemeral filesystem. Only the mounted volume at `/data` persists across restarts/redeploys.
-
-What persists cleanly today:
-- **Custom skills / code:** anything under `OPENCLAW_WORKSPACE_DIR` (default: `/data/workspace`)
-- **Node global tools (npm/pnpm):** this template configures defaults so global installs land under `/data`:
-  - npm globals: `/data/npm` (binaries in `/data/npm/bin`)
-  - pnpm globals: `/data/pnpm` (binaries) + `/data/pnpm-store` (store)
-- **Python packages:** create a venv under `/data` (example below). The runtime image includes Python + venv support.
-
-What does *not* persist cleanly:
-- `apt-get install ...` (installs into `/usr/*`)
-- Homebrew installs (typically `/opt/homebrew` or similar)
-
-### Optional bootstrap hook
-
-If `/data/workspace/bootstrap.sh` exists, the wrapper will run it on startup (best-effort) before starting the gateway.
-Use this to initialize persistent install prefixes or create a venv.
-
-Example `bootstrap.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Example: create a persistent python venv
-python3 -m venv /data/venv || true
-
-# Example: ensure npm/pnpm dirs exist
-mkdir -p /data/npm /data/npm-cache /data/pnpm /data/pnpm-store
-```
-
-## Troubleshooting
-
-### “disconnected (1008): pairing required” / dashboard health offline
-
-This is not a crash — it means the gateway is running, but no device has been approved yet.
-
-Fix:
-- Open `/setup`
-- Use the **Debug Console**:
-  - `openclaw devices list`
-  - `openclaw devices approve <requestId>`
-
-### “unauthorized: gateway token mismatch”
-
-The Control UI connects using `gateway.remote.token` and the gateway validates `gateway.auth.token`.
-
-Fix:
-- Re-run `/setup` so the wrapper writes both tokens.
-- Or set both values to the same token in config.
-
-### “Application failed to respond” / 502 Bad Gateway
-
-Most often this means the wrapper is up, but the gateway can’t start or can’t bind.
-
-Checklist:
-- Ensure you mounted a **Volume** at `/data` and set:
-  - `OPENCLAW_STATE_DIR=/data/.openclaw`
-  - `OPENCLAW_WORKSPACE_DIR=/data/workspace`
-- Ensure **Public Networking** is enabled (Railway will inject `PORT`).
-- Check Railway logs for the wrapper error: it will show `Gateway not ready:` with the reason.
-
-### Build OOM (out of memory) on Railway
-
-Building OpenClaw from source can exceed small memory tiers.
-
-Recommendations:
-- Use a plan with **2GB+ memory**.
-- If you see `Reached heap limit Allocation failed - JavaScript heap out of memory`, upgrade memory and redeploy.
-
-## Local smoke test
-
-```bash
-docker build -t clawdbot-railway-template .
-
-docker run --rm -p 8080:8080 \
-  -e PORT=8080 \
-  -e SETUP_PASSWORD=test \
-  -e OPENCLAW_STATE_DIR=/data/.openclaw \
-  -e OPENCLAW_WORKSPACE_DIR=/data/workspace \
-  -v $(pwd)/.tmpdata:/data \
-  clawdbot-railway-template
-
-# open http://localhost:8080/setup (password: test)
-```
+Your own private AI assistant on Railway. HTTPS included, no tunnels needed.
 
 ---
 
-## Official template / endorsements
+## Is a friend setting this up for you?
 
-- Officially recommended by OpenClaw: <https://docs.openclaw.ai/railway>
-- Railway announcement (official): [Railway tweet announcing 1‑click OpenClaw deploy](https://x.com/railway/status/2015534958925013438)
+If someone offered to deploy OpenClaw for you, you just need to get **2 API keys** and pick a **password**. Follow the steps below, then send all 3 things to your friend (use a secure method — not plain text over email).
 
-  ![Railway official tweet screenshot](assets/railway-official-tweet.jpg)
+### 1. Get an OpenAI API key
 
-- Endorsement from Railway CEO: [Jake Cooper tweet endorsing the OpenClaw Railway template](https://x.com/justjake/status/2015536083514405182)
+1. Go to **https://platform.openai.com/signup** and create an account
+2. Add billing credits ($5–10 is plenty to start):
+   - https://platform.openai.com/settings/organization/billing
+3. Create an API key:
+   - Go to https://platform.openai.com/api-keys
+   - Click **Create new secret key** → copy it
+   - **Save this key** — you can't view it again
 
-  ![Jake Cooper endorsement tweet screenshot](assets/railway-ceo-endorsement.jpg)
+### 2. Get a Brave Search API key
 
-- Created and maintained by **Vignesh N (@vignesh07)**
-- **1800+ deploys on Railway and counting** [Link to template on Railway](https://railway.com/deploy/clawdbot-railway-template)
+1. Go to **https://brave.com/search/api/** and click **Get Started**
+2. Create an account and pick the **Free** plan (2,000 queries/month)
+3. Get your key:
+   - Go to https://api.search.brave.com/app/keys
+   - Copy your API key
 
-![Railway template deploy count](assets/railway-deploys.jpg)
+### 3. Pick a setup password
+
+Choose any password you'll remember. This protects the `/setup` admin page where you'll paste your keys.
+
+### 4. Send these to your friend
+
+Send these **3 things** securely (e.g. 1Password, Signal, in person):
+
+- Your **OpenAI API key**
+- Your **Brave Search API key**
+- Your **setup password**
+
+Your friend will deploy it and send you a URL like `https://yourapp.up.railway.app`. Visit `/setup` at that URL, log in with username **admin** and your password, paste your keys, and you're done.
+
+### 5. Optional: set up a chat bot
+
+If you want to talk to your AI via Telegram or Discord:
+
+**Telegram:**
+1. Open Telegram, message **@BotFather**, send `/newbot`
+2. Copy the bot token (looks like `123456789:AAHk...`)
+
+**Discord:**
+1. Go to https://discord.com/developers/applications
+2. **New Application** → **Bot** tab → **Add Bot**
+3. Enable **MESSAGE CONTENT INTENT** under Privileged Gateway Intents
+4. **Reset Token** → copy the bot token
+5. Invite to your server via **OAuth2 → URL Generator** (scopes: `bot`, `applications.commands`)
+
+Paste the bot token in the `/setup` wizard under **Chat platform**.
+
+---
+
+## Deploying it yourself
+
+This section is for the person running the deploy (the "technical friend").
+
+### Prerequisites
+
+- **Railway account** — https://railway.com (Hobby plan, $5/mo)
+- **Railway CLI** — `brew install railway` then `railway login`
+- A `SETUP_PASSWORD` (yours or your friend's)
+
+### Quick deploy
+
+```bash
+git clone https://github.com/k7cfo/openclaw-railway-private
+cd openclaw-railway-private
+cp .env.sample .env
+```
+
+Edit `.env`:
+
+```
+SETUP_PASSWORD=pick-any-password
+```
+
+Deploy:
+
+```bash
+bash scripts/deploy.sh
+```
+
+After it finishes:
+1. Open your **Railway dashboard** → your service → **Settings** → **Networking** → **Generate Domain**
+2. Wait for the build (~3–5 min)
+3. Visit `https://yourapp.up.railway.app/setup`
+4. Log in: username **admin**, password = `SETUP_PASSWORD`
+5. Paste OpenAI key, Brave Search key, optional chat bot token
+6. Click **Run setup**
+
+### Manual deploy (without the script)
+
+1. Go to https://railway.com/new → **Deploy from GitHub repo** → select this repo
+2. Add a **Volume** mounted at `/data`
+3. Set these Railway Variables:
+   - `SETUP_PASSWORD` = your chosen password
+   - `OPENCLAW_STATE_DIR` = `/data/.openclaw`
+   - `OPENCLAW_WORKSPACE_DIR` = `/data/workspace`
+   - `PORT` = `8080`
+4. Go to **Settings** → **Networking** → **Generate Domain**
+5. Visit `https://yourapp.up.railway.app/setup` and complete the wizard
+
+### OpenClaw version
+
+The deploy script **automatically fetches the latest stable release** from GitHub and builds it. You don't need to do anything to stay current.
+
+To pin a specific version instead, set `OPENCLAW_GIT_REF` before deploying:
+
+```bash
+# In .env:
+OPENCLAW_GIT_REF=v2026.2.19
+```
+
+Or override it in the Railway dashboard → your service → **Variables** → `OPENCLAW_GIT_REF=v2026.x.xx`, then redeploy.
+
+Available tags: https://github.com/openclaw/openclaw/tags
+
+### Persistence
+
+Only `/data` persists across redeploys. Everything else is wiped.
+
+**Persists:** OpenClaw config, workspace, API keys (saved by wizard), npm/pnpm globals
+**Does NOT persist:** `apt-get install`, files outside `/data`
+
+Optional: create `/data/workspace/bootstrap.sh` to auto-install tools on startup.
+
+---
+
+## Security
+
+### What's protected by default
+
+- **HTTPS everywhere** — Railway provides TLS on all `.up.railway.app` domains. No plain HTTP.
+- **Setup wizard is password-protected** — `/setup` requires HTTP Basic Auth (admin + `SETUP_PASSWORD`).
+- **API keys stay on the server** — OpenAI and Brave Search keys are saved to the persistent volume, never exposed in env vars or logs.
+- **No inbound ports** — Railway routes traffic through its edge proxy. Your container is not directly reachable.
+
+### Make your instance private (only visible to you)
+
+By default, generating a Railway domain makes your instance publicly accessible (anyone with the URL can reach it). Here's how to lock it down:
+
+**Option 1: Remove the public domain after setup (bot-only mode)**
+
+If you only interact via Telegram/Discord, you don't need the web URL after initial setup:
+1. Complete the `/setup` wizard and pair your chat bot
+2. In Railway dashboard → your service → **Settings** → **Networking** → delete the public domain
+3. Your bot still works (it connects outbound), but nobody can reach the web UI
+
+**Option 2: Keep the URL but rely on the setup password**
+
+The `/setup` wizard is the only sensitive page and is behind HTTP Basic Auth. The main OpenClaw gateway requires a paired device token to do anything useful. An unpaired visitor gets a "pairing required" page with no access to your data.
+
+**Option 3: Use Railway's private networking**
+
+Railway services can communicate internally via `*.railway.internal` without a public domain. If you need web access from your own machine, you can use `railway connect` to create a private tunnel to your service (requires the Railway CLI).
+
+### Things to keep in mind
+
+- **Never commit `.env`** — it's gitignored by default. Keep it that way.
+- **Use a strong `SETUP_PASSWORD`** — this is the only thing guarding your admin page.
+- **API keys in 1Password** — if you use 1Password, store your keys there. Don't paste them in chat, email, or any unencrypted channel.
+- **Railway's `.up.railway.app` URLs are not secret** — they're randomly generated but guessable. Don't rely on URL obscurity alone; use one of the options above.
+
+---
+
+## Troubleshooting
+
+**"pairing required" / dashboard offline**
+Gateway is running but no device is approved. Go to `/setup` → approve the device.
+
+**"gateway token mismatch"**
+Re-run the `/setup` wizard to sync tokens.
+
+**502 Bad Gateway**
+Check Railway logs (`railway logs`). Ensure the volume is mounted at `/data` and all variables are set.
+
+**Build OOM (out of memory)**
+The OpenClaw build needs ~2GB RAM. Upgrade to a Railway plan with more memory, or reduce concurrent builds.
+
+**Can't reach the site after deploy**
+Make sure you generated a domain: Railway dashboard → service → **Settings** → **Networking** → **Generate Domain**.
+
+**Setup wizard won't load**
+Wait for the build to finish (~3–5 min). Check `railway logs` for errors. The wrapper server must be listening on port 8080.
+
+---
+
+## Support
+
+- GitHub Issues: https://github.com/k7cfo/openclaw-railway-private/issues
+- Upstream template: https://github.com/vignesh07/clawdbot-railway-template
