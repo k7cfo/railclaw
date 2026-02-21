@@ -124,19 +124,32 @@ deploy() {
   fi
   info "Deployment triggered. Build takes ~3-5 minutes."
 
-  # Get the public domain
+  # Generate a public domain automatically.
+  info "Generating public domain..."
+  local domain_output
+  domain_output=$(railway domain 2>&1) || true
+
+  # Extract the URL from the output (looks like: "🚀 https://xxx.up.railway.app")
+  local public_url
+  public_url=$(echo "$domain_output" | grep -oE 'https://[^ ]+' | head -1)
+
+  if [[ -n "$public_url" ]]; then
+    info "Public URL: $public_url"
+  else
+    warn "Could not auto-generate domain. Go to Railway dashboard → Settings → Networking → Generate Domain."
+    public_url="https://<your-domain>.up.railway.app"
+  fi
+
   echo ""
   info "Done! Next steps:"
   echo ""
-  echo "  1. Open your Railway project dashboard"
-  echo "  2. Go to service Settings → Networking → Generate Domain"
-  echo "     (this gives you a free https://<name>.up.railway.app URL)"
-  echo "  3. Wait for the build to finish (~3-5 min)"
-  echo "  4. Visit https://<your-domain>.up.railway.app/setup"
-  echo "  5. Log in: username 'admin', password = your SETUP_PASSWORD"
-  echo "  6. Choose OpenAI as provider, paste your API key"
-  echo "  7. Optionally add Telegram/Discord bot token"
-  echo "  8. Click Run setup"
+  echo "  1. Wait for the build to finish (~3-5 min)"
+  echo "  2. Visit ${public_url}/setup"
+  echo "  3. Log in: username 'admin', password = your SETUP_PASSWORD"
+  echo "  4. Select OpenRouter as provider, paste your API key"
+  echo "  5. Paste your Brave Search API key"
+  echo "  6. Optionally add Telegram/Discord bot token"
+  echo "  7. Click Run setup"
   echo ""
 }
 
