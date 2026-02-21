@@ -18,6 +18,19 @@ Railclaw: a simplified fork of `vignesh07/clawdbot-railway-template` that deploy
 - Added `docs/TELEGRAM.md` for comprehensive Telegram setup and troubleshooting
 - Added `docs/TROUBLESHOOTING-401.md` for fixing 401 authentication errors
 - Removed Tailscale and Cloudflare Tunnel (not needed — Railway provides HTTPS)
+- `Dockerfile`: Auto-resolves latest stable OpenClaw release at build time via GitHub API (falls back to hardcoded version)
+- `src/server.js`: OpenRouter model catalog verified against live API — uses correct IDs with dots (e.g. `claude-sonnet-4.5` not `claude-sonnet-4-5`), correct provider prefixes (`z-ai/` not `zai/`), and only models that exist on OpenRouter
+
+## OpenClaw version resolution
+The Dockerfile resolves the OpenClaw version in priority order:
+1. `OPENCLAW_GIT_REF` env var (set via Railway variable or `deploy.sh`) — pinned
+2. Latest stable release from GitHub API — automatic
+3. Hardcoded fallback in Dockerfile — safety net
+
+Users deploying directly from Railway dashboard get the latest version automatically. To pin: set `OPENCLAW_GIT_REF=vYYYY.M.DD` in Railway variables.
+
+## OpenRouter model catalog
+All model IDs in `OPENROUTER_MODEL_CATALOG` and `OPENROUTER_PRESETS` are verified against `https://openrouter.ai/api/v1/models`. When updating models, use `curl -s https://openrouter.ai/api/v1/models | python3 -c "import json,sys; [print(m['id']) for m in json.load(sys.stdin)['data'] if 'KEYWORD' in m['id']]"` to check exact IDs.
 
 ## Current deployment
 - **Railway project:** `railclaw` (workspace K7)

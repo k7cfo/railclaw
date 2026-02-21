@@ -20,11 +20,22 @@ RUN corepack enable
 
 WORKDIR /openclaw
 
-# OpenClaw version. The deploy script auto-resolves this to the latest stable release.
-# To pin a specific version: set OPENCLAW_GIT_REF in .env or Railway variables.
-# The value below is a fallback default if no override is provided.
-ARG OPENCLAW_GIT_REF=v2026.2.19
-RUN git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" https://github.com/openclaw/openclaw.git .
+# OpenClaw version resolution (in priority order):
+#   1. OPENCLAW_GIT_REF set via Railway variable or deploy.sh  (pinned)
+#   2. Latest stable release fetched from GitHub API            (auto)
+#   3. Hardcoded fallback below                                 (safety net)
+ARG OPENCLAW_GIT_REF=""
+RUN set -eux; \
+  FALLBACK="v2026.2.21"; \
+  REF="${OPENCLAW_GIT_REF}"; \
+  if [ -z "$REF" ]; then \
+    REF=$(curl -fsSL --retry 2 --max-time 10 \
+      https://api.github.com/repos/openclaw/openclaw/releases/latest \
+      | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) || true; \
+  fi; \
+  : "${REF:=$FALLBACK}"; \
+  echo ">>> Building OpenClaw $REF"; \
+  git clone --depth 1 --branch "$REF" https://github.com/openclaw/openclaw.git .
 
 # Patch: relax version requirements for packages that may reference unpublished versions.
 # Apply to all extension package.json files to handle workspace protocol (workspace:*).

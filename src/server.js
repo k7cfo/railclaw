@@ -661,7 +661,7 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
         <option value="budget">Budget — DeepSeek V3.2 only ($0.26–0.38/MTok)</option>
       </select>
       <div class="muted" style="margin-top:0.25rem; font-size:0.85rem">
-        All presets include 10 switchable models: Opus, Codex, Sonnet, Gemini Flash, Kimi, GLM, MiniMax, DeepSeek, Haiku, Qwen Coder. Free image models included.
+        All presets include 10 switchable models: Opus 4.6, Codex, Sonnet 4.5, Gemini 3 Flash, Kimi K2.5, GLM 5, MiniMax M2.5, DeepSeek V3.2, Haiku 4.5, Qwen Coder. Free image models included.
       </div>
     </div>
   </div>
@@ -782,24 +782,24 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
 
 // OpenRouter model presets — injected post-onboard when user selects OpenRouter.
 const OPENROUTER_MODEL_CATALOG = {
-  "openrouter/anthropic/claude-opus-4-6": { alias: "Opus" },
+  "openrouter/anthropic/claude-opus-4.6": { alias: "Opus" },
   "openrouter/openai/gpt-5.2-codex": { alias: "Codex" },
-  "openrouter/anthropic/claude-sonnet-4-5": { alias: "Sonnet" },
+  "openrouter/anthropic/claude-sonnet-4.5": { alias: "Sonnet" },
   "openrouter/google/gemini-3-flash-preview": { alias: "Gemini Flash" },
   "openrouter/moonshotai/kimi-k2.5": { alias: "Kimi" },
-  "openrouter/zai/glm-5": { alias: "GLM" },
+  "openrouter/z-ai/glm-5": { alias: "GLM" },
   "openrouter/minimax/minimax-m2.5": { alias: "MiniMax" },
   "openrouter/deepseek/deepseek-v3.2": { alias: "DeepSeek" },
-  "openrouter/anthropic/claude-haiku-4-5": { alias: "Haiku" },
-  "openrouter/qwen/qwen3-coder-480b-a35b-instruct": { alias: "Qwen Coder" },
+  "openrouter/anthropic/claude-haiku-4.5": { alias: "Haiku" },
+  "openrouter/qwen/qwen3-coder-plus": { alias: "Qwen Coder" },
 };
 
 const OPENROUTER_PRESETS = {
   quality: {
-    model: { primary: "openrouter/anthropic/claude-sonnet-4-5", fallbacks: ["openrouter/deepseek/deepseek-v3.2"] },
+    model: { primary: "openrouter/anthropic/claude-sonnet-4.5", fallbacks: ["openrouter/deepseek/deepseek-v3.2"] },
   },
   balanced: {
-    model: { primary: "openrouter/deepseek/deepseek-v3.2", fallbacks: ["openrouter/anthropic/claude-haiku-4-5"] },
+    model: { primary: "openrouter/deepseek/deepseek-v3.2", fallbacks: ["openrouter/anthropic/claude-haiku-4.5"] },
   },
   budget: {
     model: { primary: "openrouter/deepseek/deepseek-v3.2" },
@@ -832,8 +832,8 @@ const AUTH_GROUPS = [
     { value: "moonshot-api-key", label: "Moonshot AI API key" },
     { value: "kimi-code-api-key", label: "Kimi Code API key" }
   ]},
-  { value: "zai", label: "Z.AI (GLM 4.7)", hint: "API key", options: [
-    { value: "zai-api-key", label: "Z.AI (GLM 4.7) API key" }
+  { value: "zai", label: "Z.AI (GLM 5)", hint: "API key", options: [
+    { value: "zai-api-key", label: "Z.AI (GLM 5) API key" }
   ]},
   { value: "minimax", label: "MiniMax", hint: "M2.1 (recommended)", options: [
     { value: "minimax-api", label: "MiniMax M2.1" },
@@ -1211,14 +1211,14 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
 
       // Free image models.
       await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "agents.defaults.imageModel", JSON.stringify({
-        primary: "openrouter/qwen/qwen-2.5-vl-72b-instruct:free",
-        fallbacks: ["openrouter/google/gemini-2.0-flash-vision:free"],
+        primary: "openrouter/qwen/qwen2.5-vl-72b-instruct:free",
+        fallbacks: ["openrouter/google/gemini-2.0-flash-001:free"],
       })]));
 
       // Heartbeat with cheap model.
       await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "agents.defaults.heartbeat", JSON.stringify({
         every: "30m",
-        model: "openrouter/anthropic/claude-haiku-4-5",
+        model: "openrouter/anthropic/claude-haiku-4.5",
         target: "last",
       })]));
 
