@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/railclaw.png" alt="OpenClaw on Railway" width="200">
+</p>
+
 # OpenClaw on Railway — Always the Latest Stable Release
 
 This is one of the few turnkey scripts that **automatically builds and deploys the latest stable release of OpenClaw** on Railway. No manual version tracking, no stale builds — run the deploy script and you get the newest release from GitHub, built from source, with HTTPS out of the box.
@@ -106,14 +110,26 @@ Paste the bot token in the `/setup` wizard under **Chat platform**.
 
 This section is for the person running the deploy (the "technical friend").
 
-### Step 1: Create a Railway account
+There are **two scripts** — use whichever fits your situation:
+
+| | `setup.sh` | `deploy.sh` |
+|---|---|---|
+| **Use when** | First time on this machine | You already have Railway CLI, `.env`, etc. |
+| **What it does** | Installs Homebrew + Railway CLI, logs you in, creates `.env`, then calls `deploy.sh` | Creates a new Railway project and deploys directly |
+| **Run with** | `bash scripts/setup.sh` | `bash scripts/deploy.sh` |
+
+**If in doubt, run `setup.sh`** — it detects what's already installed and skips those steps.
+
+### First-time setup
+
+#### Step 1: Create a Railway account
 
 1. Go to **https://railway.com** and click **Sign Up**
 2. You can sign up with **GitHub**, **Google**, or **email** — any method works
 3. Pick the **Hobby** plan ($5/mo) — required for deployments
 4. **Important:** If your workplace blocks SSO/OAuth or you're on a restricted network, get a Railway API token instead (see below)
 
-### Step 2: Get a Railway API token (optional)
+#### Step 2: Get a Railway API token (optional)
 
 The setup script can log you in two ways:
 - **Browser login** — opens Railway's website to authenticate (easiest, works if you have browser access)
@@ -125,7 +141,7 @@ To create an API token:
 3. Click **Create Token** → name it (e.g. `openclaw-deploy`) → copy the token
 4. Save it somewhere safe (1Password, etc.) — you can't view it again
 
-### Step 3: Run the setup script
+#### Step 3: Run the setup script
 
 The setup script handles everything: installs Homebrew and the Railway CLI if needed, logs you in, asks for your password, and deploys.
 
@@ -146,20 +162,35 @@ export RAILWAY_TOKEN=your-token-here
 bash scripts/setup.sh
 ```
 
-### Step 4: Complete the setup wizard
+#### Step 4: Complete the setup wizard
 
 After the deploy finishes:
-1. Open your **Railway dashboard** → your service → **Settings** → **Networking** → **Generate Domain**
-2. Wait for the build (~3–5 min)
-3. Visit `https://yourapp.up.railway.app/setup`
-4. Log in: username **admin**, password = your setup password
-5. Select **OpenRouter** as provider, paste your OpenRouter API key
-6. Paste Brave Search key, optional chat bot token
-7. Click **Run setup**
+1. Wait for the build (~3–5 min)
+2. Visit `https://yourapp.up.railway.app/setup`
+3. Log in: username **admin**, password = your setup password
+4. Select **OpenRouter** as provider, paste your OpenRouter API key
+5. Paste Brave Search key, optional chat bot token
+6. Click **Run setup**
 
-### Alternative: manual deploy (without the script)
+### Redeploying from scratch
 
-If you prefer to do it by hand or the script doesn't work for your setup:
+If you deleted a Railway project and want to deploy a fresh instance, just run `deploy.sh` again:
+
+```bash
+bash scripts/deploy.sh
+```
+
+The script automatically clears any stale project links before creating a new project, so you don't need to do any manual cleanup. Each run creates a brand-new Railway project with a fresh volume, variables, and domain.
+
+To change the project name, set `PROJECT_NAME` in your `.env` or export it:
+
+```bash
+PROJECT_NAME=mybot bash scripts/deploy.sh
+```
+
+### Manual deploy (without the scripts)
+
+If you prefer to do it by hand or the scripts don't work for your setup:
 
 ```bash
 git clone https://github.com/k7cfo/openclaw-railway-private

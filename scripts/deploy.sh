@@ -15,8 +15,13 @@ set -euo pipefail
 #   OPENCLAW_GATEWAY_TOKEN — Gateway admin token (auto-generated if not set)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# All Railway CLI commands must run from the project root (where Dockerfile lives)
+# so the project link is always created in the right place.
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 # Auto-source .env if present
-for envfile in "$(dirname "$0")/../.env" "./.env"; do
+for envfile in "$PROJECT_ROOT/.env" "./.env"; do
   if [[ -f "$envfile" ]]; then
     set -a; source "$envfile"; set +a
     break
@@ -78,6 +83,10 @@ deploy() {
 
   resolve_openclaw_version
 
+  # Clear any stale project link (e.g. from a previously deleted project).
+  info "Unlinking any previous Railway project..."
+  railway unlink --yes 2>/dev/null || true
+
   info "Creating Railway project: $project_name ..."
   if ! railway init --name "$project_name" 2>&1; then
     fail "Failed to create Railway project."
@@ -119,10 +128,7 @@ deploy() {
   info "Volume attached."
 
   info "Deploying from project root..."
-  # railway up uploads the current directory — must be the project root (where Dockerfile lives).
-  local project_root
-  project_root="$(cd "$(dirname "$0")/.." && pwd)"
-  if ! (cd "$project_root" && railway up --detach) 2>&1; then
+  if ! railway up --detach 2>&1; then
     fail "Deploy failed. Check Railway logs."
   fi
   info "Deployment triggered. Build takes ~3-5 minutes."
