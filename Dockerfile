@@ -39,6 +39,13 @@ RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:install && pnpm ui:build
 
+# Strip build-only artifacts to shrink the layer copied into the runtime image.
+# .git alone can be 100MB+; turbo/cache dirs add more.
+RUN rm -rf .git .turbo .cache \
+  && find . -name '*.map' -delete 2>/dev/null || true \
+  && find . -type d -name '__tests__' -exec rm -rf {} + 2>/dev/null || true \
+  && find . -type d -name 'test' -exec rm -rf {} + 2>/dev/null || true
+
 
 # Runtime image
 FROM node:22-bookworm
