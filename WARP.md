@@ -20,6 +20,8 @@ Railclaw: a simplified fork of `vignesh07/clawdbot-railway-template` that deploy
 - Removed Tailscale and Cloudflare Tunnel (not needed — Railway provides HTTPS)
 - `Dockerfile`: Auto-resolves latest stable OpenClaw release at build time via GitHub API (falls back to hardcoded version)
 - `src/server.js`: OpenRouter model catalog verified against live API — uses correct IDs with dots (e.g. `claude-sonnet-4.5` not `claude-sonnet-4-5`), correct provider prefixes (`z-ai/` not `zai/`), and only models that exist on OpenRouter
+- `src/server.js`: Removed unsupported `--token` flag from OpenClaw CLI commands that don't accept it (`plugins`, `doctor`, `status`, `health`). Kept for commands that do (`devices`, `pairing`, `logs`). Verified against OpenClaw source.
+- `src/server.js`: Stronger Telegram bot token validation (`\d{5,}:[A-Za-z0-9_-]{10,}`) to prevent truncated tokens from causing 401 retry loops
 
 ## OpenClaw version resolution
 The Dockerfile resolves the OpenClaw version in priority order:
@@ -32,10 +34,15 @@ Users deploying directly from Railway dashboard get the latest version automatic
 ## OpenRouter model catalog
 All model IDs in `OPENROUTER_MODEL_CATALOG` and `OPENROUTER_PRESETS` are verified against `https://openrouter.ai/api/v1/models`. When updating models, use `curl -s https://openrouter.ai/api/v1/models | python3 -c "import json,sys; [print(m['id']) for m in json.load(sys.stdin)['data'] if 'KEYWORD' in m['id']]"` to check exact IDs.
 
+## OpenClaw CLI --token compatibility
+Only gateway RPC commands accept `--token`: `devices`, `pairing`, `logs`, `gateway call/health/probe`.
+Local-only commands do NOT: `plugins`, `doctor`, `status`, `health`, `config`.
+The gateway token is available to child processes via `process.env.OPENCLAW_GATEWAY_TOKEN` and via config (`gateway.remote.token`).
+
 ## Current deployment
-- **Railway project:** `railclaw` (workspace K7)
+- **Railway project:** `talented-warmth` (workspace K7)
 - **Service:** `railclaw` (single service, no sidecar)
-- **Public URL:** `https://<app>.up.railway.app` (Railway HTTPS)
+- **Public URL:** `https://railclaw-production.up.railway.app` (Railway HTTPS)
 - **Volume:** `/data` (5GB) for persistent state
 
 ## Architecture
