@@ -100,6 +100,7 @@ If you want to talk to your AI via Telegram or Discord:
    - Bot responds with a pairing code like `3EY4PUYS`
    - Go to `/setup` → **Section 5: Approve pairing**
    - Paste code and click **Approve**
+   - ✅ Send another message — the bot will introduce itself and walk you through choosing its name, personality, and getting to know you
 
 📖 **Full guide**: See [docs/TELEGRAM.md](docs/TELEGRAM.md) for detailed setup and troubleshooting
 
