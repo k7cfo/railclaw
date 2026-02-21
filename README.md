@@ -12,11 +12,24 @@ This is one of the few turnkey scripts that **automatically builds and deploys t
 
 ## Is a friend setting this up for you?
 
-If someone offered to deploy OpenClaw for you, you just need **2 API keys** and a **password**. Follow the steps below.
+If someone offered to deploy OpenClaw for you, follow the steps below. You'll sign up for **3 free accounts**, get your API keys, and send them to your friend so they can deploy it remotely.
 
 > **⚠️ Never send API keys over plain text.** No email, no SMS, no Discord DMs, no Slack. Use a secure method: **1Password shared vault, Signal disappearing messages, or in person.** API keys are like passwords — anyone who has them can use your account and run up charges.
 
-### 1. Get an OpenRouter API key
+### 1. Create a Railway account and get an API token
+
+Railway is the hosting platform that runs your AI assistant. Your friend needs a Railway API token from your account so they can deploy the service for you remotely.
+
+1. Go to **https://railway.com** and click **Sign Up**
+2. Sign up with **GitHub**, **Google**, or **email** — any method works
+3. Pick the **Hobby** plan ($5/mo) — this is required for deployments
+4. Once you're logged in, go to **https://railway.com/account/tokens**
+5. Click **Create Token** → name it (e.g. `openclaw-deploy`) → copy the token
+6. **Save this token** — you can't view it again after you leave the page
+
+This token lets your friend deploy to your Railway account without needing your password. You can revoke it at any time from the same tokens page.
+
+### 2. Get an OpenRouter API key
 
 OpenRouter gives you access to all the best AI models (GPT-4o, Claude, Gemini, Llama, and more) through a single API key. Pay-per-use, no subscriptions.
 
@@ -29,7 +42,7 @@ OpenRouter gives you access to all the best AI models (GPT-4o, Claude, Gemini, L
    - Click **Create Key** → name it (e.g. `openclaw`) → copy it
    - **Save this key** — you'll need it for the setup wizard
 
-### 2. Get a Brave Search API key
+### 3. Get a Brave Search API key
 
 This lets your AI assistant search the web.
 
@@ -39,17 +52,18 @@ This lets your AI assistant search the web.
    - Go to https://api.search.brave.com/app/keys
    - Copy your API key
 
-### 3. Pick a setup password
+### 4. Pick a setup password
 
-Choose any password you'll remember. This protects the `/setup` admin page where you paste your keys.
+Choose any password you'll remember. This protects the `/setup` admin page where you'll paste your API keys after deployment.
 
-### 4. Send these to your friend — securely!
+### 5. Send these to your friend — securely!
 
-Send these **3 things** using a **secure method only**:
+Send these **4 things** using a **secure method only**:
 
-- Your **OpenRouter API key**
-- Your **Brave Search API key**
-- Your **setup password**
+- Your **Railway API token** (from step 1)
+- Your **OpenRouter API key** (from step 2)
+- Your **Brave Search API key** (from step 3)
+- Your **setup password** (from step 4)
 
 **Good ways to share:**
 - 🔒 1Password / Bitwarden shared vault
@@ -58,7 +72,9 @@ Send these **3 things** using a **secure method only**:
 
 **Never use:** email, SMS, Discord, Slack, or any unencrypted channel.
 
-Your friend will deploy it and send you a URL like `https://yourapp.up.railway.app`. Visit `/setup` at that URL, log in with username **admin** and your password, paste your keys, and you're done.
+Your friend will use the Railway token to deploy, then send you a URL like `https://yourapp.up.railway.app`. Visit `/setup` at that URL, log in with username **admin** and your password, paste your OpenRouter and Brave Search keys, and you're done.
+
+> **After deployment:** You can revoke the Railway API token at https://railway.com/account/tokens if you don't want your friend to have deploy access anymore. Your OpenRouter and Brave Search keys are saved on the server and are only visible to you through the `/setup` page.
 
 ### 5. Optional: set up a chat bot
 
