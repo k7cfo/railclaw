@@ -10,9 +10,12 @@ A simplified fork of `vignesh07/clawdbot-railway-template` that deploys OpenClaw
 ## Key changes from upstream
 - `src/server.js`: Added persistent extra env var system (`extra-env.json`) for saving Brave Search API key via setup wizard
 - `src/server.js`: Brave Search API key input added to `/setup` wizard HTML
+- `src/server.js`: Added automatic cleanup of orphaned gateway processes to prevent port conflicts and Telegram 401 errors
 - `src/setup-app.js`: Sends `braveApiKey` in setup payload
 - Added `scripts/deploy.sh` for one-command Railway deploy
 - Added `templates/AGENTS.md` for AI agent deploy instructions
+- Added `docs/TELEGRAM.md` for comprehensive Telegram setup and troubleshooting
+- Added `docs/TROUBLESHOOTING-401.md` for fixing 401 authentication errors
 - Removed Tailscale and Cloudflare Tunnel (not needed — Railway provides HTTPS)
 
 ## Current deployment

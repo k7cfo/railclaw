@@ -94,6 +94,14 @@ If you want to talk to your AI via Telegram or Discord:
 **Telegram:**
 1. Open Telegram, message **@BotFather**, send `/newbot`
 2. Copy the bot token (looks like `123456789:AAHk...`)
+3. Paste it in `/setup` → **Section 3: Chat platform** → **Telegram bot token**
+4. After setup completes:
+   - Message your bot in Telegram (send `/start`)
+   - Bot responds with a pairing code like `3EY4PUYS`
+   - Go to `/setup` → **Section 5: Approve pairing**
+   - Paste code and click **Approve**
+
+📖 **Full guide**: See [docs/TELEGRAM.md](docs/TELEGRAM.md) for detailed setup and troubleshooting
 
 **Discord:**
 1. Go to https://discord.com/developers/applications
@@ -101,8 +109,7 @@ If you want to talk to your AI via Telegram or Discord:
 3. Enable **MESSAGE CONTENT INTENT** under Privileged Gateway Intents
 4. **Reset Token** → copy the bot token
 5. Invite to your server via **OAuth2 → URL Generator** (scopes: `bot`, `applications.commands`)
-
-Paste the bot token in the `/setup` wizard under **Chat platform**.
+6. Paste the bot token in `/setup` → **Section 3: Chat platform** → **Discord bot token**
 
 ---
 
@@ -276,8 +283,13 @@ Railway services can communicate internally via `*.railway.internal` without a p
 
 ## Troubleshooting
 
+### Common issues
+
 **"pairing required" / dashboard offline**
 Gateway is running but no device is approved. Go to `/setup` → approve the device.
+
+**Telegram bot not responding**
+See the comprehensive [Telegram troubleshooting guide](docs/TELEGRAM.md) for step-by-step fixes.
 
 **"gateway token mismatch"**
 Re-run the `/setup` wizard to sync tokens.
@@ -293,6 +305,11 @@ Make sure you generated a domain: Railway dashboard → service → **Settings**
 
 **Setup wizard won't load**
 Wait for the build to finish (~3–5 min). Check `railway logs` for errors. The wrapper server must be listening on port 8080.
+
+### Platform-specific guides
+
+- **Telegram**: [docs/TELEGRAM.md](docs/TELEGRAM.md) — complete setup and troubleshooting
+- More guides coming soon (Discord, Slack, etc.)
 
 ---
 

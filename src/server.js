@@ -201,9 +201,79 @@ async function waitForGatewayReady(opts = {}) {
   return false;
 }
 
+// Clean up any orphaned gateway processes that might block port 18789.
+// This prevents "Port already in use" errors and Telegram 401 auth failures
+// caused by multiple gateway instances trying to run simultaneously.
+async function cleanupOrphanedGateway() {
+  try {
+    // Check if port 18789 is already in use
+    const net = await import("node:net");
+    const isPortInUse = await new Promise((resolve) => {
+      const server = net.createServer();
+      server.once("error", (err) => {
+        if (err.code === "EADDRINUSE") {
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      });
+      server.once("listening", () => {
+        server.close();
+        resolve(false);
+      });
+      server.listen(INTERNAL_GATEWAY_PORT, INTERNAL_GATEWAY_HOST);
+    });
+
+    if (isPortInUse) {
+      console.warn(`[wrapper] Port ${INTERNAL_GATEWAY_PORT} is in use, attempting cleanup...`);
+      try {
+        // Try to find and kill the process using lsof (if available)
+        const lsofResult = childProcess.spawnSync("lsof", ["-ti", `:${INTERNAL_GATEWAY_PORT}`], {
+          encoding: "utf8",
+          timeout: 2000,
+        });
+        const pid = lsofResult.stdout.trim();
+        if (pid && /^\d+$/.test(pid)) {
+          console.warn(`[wrapper] Killing orphaned process on port ${INTERNAL_GATEWAY_PORT} (PID ${pid})`);
+          childProcess.spawnSync("kill", ["-9", pid]);
+          await sleep(500);
+        }
+      } catch (lsofErr) {
+        // lsof might not be available; try pkill as fallback
+        console.warn(`[wrapper] lsof failed, trying pkill fallback: ${String(lsofErr)}`);
+        try {
+          childProcess.spawnSync("pkill", ["-f", "openclaw.*gateway"]);
+          await sleep(500);
+        } catch (pkillErr) {
+          console.warn(`[wrapper] pkill also failed: ${String(pkillErr)}`);
+        }
+      }
+    }
+
+    // Clean up any stale lock files
+    try {
+      const lockPatterns = ["*.lock", ".gateway.lock", "gateway.pid"];
+      for (const pattern of lockPatterns) {
+        const lockPath = path.join(STATE_DIR, pattern);
+        if (fs.existsSync(lockPath)) {
+          fs.rmSync(lockPath, { force: true });
+          console.warn(`[wrapper] Removed stale lock file: ${pattern}`);
+        }
+      }
+    } catch (lockErr) {
+      console.warn(`[wrapper] Lock cleanup failed (non-fatal): ${String(lockErr)}`);
+    }
+  } catch (err) {
+    console.warn(`[wrapper] Gateway cleanup check failed (non-fatal): ${String(err)}`);
+  }
+}
+
 async function startGateway() {
   if (gatewayProc) return;
   if (!isConfigured()) throw new Error("Gateway cannot start: not configured");
+
+  // Clean up any orphaned processes before starting
+  await cleanupOrphanedGateway();
 
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
