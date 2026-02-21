@@ -1,0 +1,10 @@
+# Reduce build context sent to Railway (saves upload time and memory).
+.git
+.github
+.env
+.env.*
+*.md
+LICENSE
+assets/
+scripts/
+node_modules/
