@@ -2,7 +2,7 @@
   <img src="assets/railclaw.png" alt="Railclaw — Deploy OpenClaw on Railway" width="200">
 </p>
 
-# Railclaw — Deploy OpenClaw on Railway
+# Railclaw — Deploy OpenClaw on Railway by K7CFO
 
 Railclaw is a turnkey deploy wrapper for [OpenClaw](https://github.com/openclaw/openclaw) — the open-source AI assistant platform. It automatically builds the latest stable release from source and deploys it on Railway with HTTPS out of the box.
 
@@ -288,6 +288,9 @@ The OpenClaw build needs ~2GB RAM. Upgrade to a Railway plan with more memory, o
 
 **Can't reach the site after deploy**
 Make sure you generated a domain: Railway dashboard → service → **Settings** → **Networking** → **Generate Domain**.
+
+**Deleted projects still showing as running**
+Railway uses a soft-delete grace period — deleted projects may still appear in your dashboard and continue running for up to 48 hours. To remove them immediately: click into the project → **Settings** → **Danger** → **Delete project** → **Delete immediately**.
 
 **Setup wizard won't load**
 Wait for the build to finish (~3–5 min). Check `railway logs` for errors. The wrapper server must be listening on port 8080.
