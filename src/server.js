@@ -711,8 +711,8 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
 
     <label>Telegram permissions preset</label>
     <select id="telegramPermissions">
-      <option value="restrictive">Restrictive (default) — sandbox exec, approval required</option>
-      <option value="standard">Standard (recommended for VPS) — gateway exec, auto-approve safe commands</option>
+      <option value="restrictive">Restrictive — sandbox exec, approval required</option>
+      <option value="standard" selected>Standard (recommended for VPS) — gateway exec, auto-approve safe commands</option>
       <option value="full">Full Access (⚠️ trusted users only) — auto-approve all, full exec, all Telegram actions</option>
     </select>
     <div class="muted" style="margin-top: 0.25rem">
