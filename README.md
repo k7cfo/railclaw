@@ -29,6 +29,13 @@ Railway is the hosting platform that runs your AI assistant. Your friend needs a
 
 This token lets your friend deploy to your Railway account without needing your password. You can revoke it at any time from the same tokens page.
 
+**Also invite your friend to your Railway workspace** so they can see the project and help troubleshoot:
+1. In your Railway dashboard, click your workspace name (top-left)
+2. Go to **People** → **Invite to workspace**
+3. Enter your friend's email and send the invite
+
+This gives them visibility into your project without sharing your password.
+
 ### 2. Get an OpenRouter API key
 
 OpenRouter gives you access to all the best AI models (GPT-4o, Claude, Gemini, Llama, and more) through a single API key. Pay-per-use, no subscriptions.
