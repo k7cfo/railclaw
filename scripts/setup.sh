@@ -103,8 +103,22 @@ ensure_cli_tools() {
   fi
 }
 
-# ── Step 3: Railway login ───────────────────────────────────────────────────
+# ── Step 3: Railway login ───────────────────────────────────────────────────────
 ensure_railway_login() {
+  # If RAILWAY_TOKEN is already set (from .env or environment), use it directly.
+  if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+    export RAILWAY_TOKEN
+    if railway whoami >/dev/null 2>&1; then
+      local user
+      user=$(railway whoami 2>/dev/null || echo "unknown")
+      info "Logged into Railway via API token as: $user"
+      return
+    else
+      warn "RAILWAY_TOKEN is set but appears invalid."
+    fi
+  fi
+
+  # Check if already logged in via browser session.
   if railway whoami >/dev/null 2>&1; then
     local user
     user=$(railway whoami 2>/dev/null || echo "unknown")
@@ -117,13 +131,41 @@ ensure_railway_login() {
   echo "  You need a Railway account (Hobby plan, \$5/mo)."
   echo "  Sign up at: https://railway.com"
   echo ""
-  ask "Press Enter to open Railway login in your browser..."
-  read -r
+  echo "  How do you want to log in?"
+  echo "    1) Browser login  — opens Railway in your browser (easiest)"
+  echo "    2) API token      — paste a token (for headless/restricted environments)"
+  echo ""
+  ask "Choose [1/2]: "
+  read -r login_choice
 
-  railway login
+  case "$login_choice" in
+    2)
+      echo ""
+      echo "  Get a token at: https://railway.com/account/tokens"
+      echo "  Click 'Create Token' → copy it."
+      echo ""
+      ask "Paste your Railway API token: "
+      read -r token_input
+      [[ -z "$token_input" ]] && fail "No token provided."
+      export RAILWAY_TOKEN="$token_input"
 
-  railway whoami >/dev/null 2>&1 || fail "Railway login failed. Try again with: railway login"
-  info "Railway login successful"
+      if ! railway whoami >/dev/null 2>&1; then
+        fail "Token is invalid. Check it at https://railway.com/account/tokens and try again."
+      fi
+
+      # Save token to .env so deploy.sh picks it up and future runs don't re-prompt.
+      SAVE_RAILWAY_TOKEN="$token_input"
+      info "Railway API token verified"
+      ;;
+    *)
+      echo ""
+      info "Opening Railway login in your browser..."
+      railway login
+
+      railway whoami >/dev/null 2>&1 || fail "Railway login failed. Try again with: railway login"
+      info "Railway login successful"
+      ;;
+  esac
 }
 
 # ── Step 4: Collect configuration ────────────────────────────────────────────
@@ -181,6 +223,13 @@ write_env() {
 SETUP_PASSWORD=$SETUP_PASSWORD
 PROJECT_NAME=$PROJECT_NAME
 EOF
+
+  # If user logged in via API token, save it to .env so deploy.sh and future runs use it.
+  if [[ -n "${SAVE_RAILWAY_TOKEN:-}" ]]; then
+    echo "" >> "$env_file"
+    echo "# Railway API token (from setup.sh — do NOT share or commit this)" >> "$env_file"
+    echo "RAILWAY_TOKEN=$SAVE_RAILWAY_TOKEN" >> "$env_file"
+  fi
 
   info ".env written to $env_file"
 }

@@ -85,6 +85,7 @@ deploy() {
   info "Project created: $project_name"
 
   info "Adding service..."
+  warn "If Railway asks 'Enter a variable' — just press Escape to skip. We set variables in the next step."
   if ! railway add --service "$project_name" 2>&1; then
     fail "Failed to add service."
   fi
