@@ -12,7 +12,13 @@ Deploy OpenClaw on Railway. No tunnels, no sidecars — Railway provides HTTPS.
 2. In Railway dashboard: **Settings → Networking → Generate Domain** to get HTTPS URL
 3. Visit `https://yourapp.up.railway.app/setup` (admin / SETUP_PASSWORD)
 4. Paste OpenAI API key, Brave Search API key, optional chat bot token
-5. Click **Run setup** → approve device pairing if using a chat bot
+5. Click **Run setup**
+6. **If using Telegram**: After setup completes:
+   - Message your bot in Telegram (send `/start`)
+   - Copy the pairing code (e.g. `3EY4PUYS`)
+   - Go to `/setup` → **Section 5: Approve pairing**
+   - Paste code, select Telegram, click **Approve**
+   - ✅ You can now chat with OpenClaw via Telegram
 
 ## Architecture
 - Wrapper server on port 8080, proxies to OpenClaw gateway on localhost:18789
