@@ -436,6 +436,9 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
 
     <div style="display:flex; gap:0.5rem; align-items:center">
       <select id="consoleCmd" style="flex: 1">
+        <option value="channels.add.telegram">➕ Add Telegram (paste bot token in arg)</option>
+        <option value="channels.add.discord">➕ Add Discord (paste bot token in arg)</option>
+        <option disabled>──────────</option>
         <option value="gateway.restart">gateway.restart (wrapper-managed)</option>
         <option value="gateway.stop">gateway.stop (wrapper-managed)</option>
         <option value="gateway.start">gateway.start (wrapper-managed)</option>
@@ -1070,6 +1073,10 @@ const ALLOWED_CONSOLE_COMMANDS = new Set([
   // Plugin management
   "openclaw.plugins.list",
   "openclaw.plugins.enable",
+
+  // Add chat channels after initial setup (no reset needed)
+  "channels.add.telegram",
+  "channels.add.discord",
 ]);
 
 app.post("/setup/api/console/run", requireSetupAuth, async (req, res) => {
@@ -1151,6 +1158,49 @@ app.post("/setup/api/console/run", requireSetupAuth, async (req, res) => {
       }
       const r = await runCmd(OPENCLAW_NODE, clawArgs(["devices", "approve", requestId]));
       return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
+    }
+
+    // Add Telegram channel (no reset required)
+    if (cmd === "channels.add.telegram") {
+      const botToken = String(arg || "").trim();
+      if (!botToken) return res.status(400).json({ ok: false, error: "Paste your Telegram bot token in the arg field (e.g. 123456789:AAHk...)" });
+      if (!/^\d+:[A-Za-z0-9_-]+$/.test(botToken)) {
+        return res.status(400).json({ ok: false, error: "Invalid Telegram bot token format. Expected: 123456789:AAHk..." });
+      }
+
+      let out = "";
+      const cfgObj = { enabled: true, dmPolicy: "pairing", botToken, groupPolicy: "allowlist", streamMode: "partial" };
+      const set = await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "channels.telegram", JSON.stringify(cfgObj)]));
+      out += `[telegram config] exit=${set.code}\n${set.output || "(no output)"}\n`;
+
+      const plug = await runCmd(OPENCLAW_NODE, clawArgs(["plugins", "enable", "telegram"]));
+      out += `[telegram plugin] exit=${plug.code}\n${plug.output || "(no output)"}\n`;
+
+      await restartGateway();
+      out += "\n[gateway] restarted.\n";
+      out += "\nTelegram added! Send a message to your bot, then use 'Refresh pending devices' below to approve the pairing.\n";
+
+      return res.json({ ok: set.code === 0, output: out });
+    }
+
+    // Add Discord channel (no reset required)
+    if (cmd === "channels.add.discord") {
+      const botToken = String(arg || "").trim();
+      if (!botToken) return res.status(400).json({ ok: false, error: "Paste your Discord bot token in the arg field" });
+
+      let out = "";
+      const cfgObj = { enabled: true, token: botToken, groupPolicy: "allowlist", dm: { policy: "pairing" } };
+      const set = await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "channels.discord", JSON.stringify(cfgObj)]));
+      out += `[discord config] exit=${set.code}\n${set.output || "(no output)"}\n`;
+
+      const plug = await runCmd(OPENCLAW_NODE, clawArgs(["plugins", "enable", "discord"]));
+      out += `[discord plugin] exit=${plug.code}\n${plug.output || "(no output)"}\n`;
+
+      await restartGateway();
+      out += "\n[gateway] restarted.\n";
+      out += "\nDiscord added! Send a DM to your bot, then use 'Refresh pending devices' below to approve the pairing.\n";
+
+      return res.json({ ok: set.code === 0, output: out });
     }
 
     // Plugin management commands
