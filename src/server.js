@@ -1096,27 +1096,32 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       if (!supports("telegram")) {
         extra += "\n[telegram] skipped (this openclaw build does not list telegram in `channels add --help`)\n";
       } else {
-        // Avoid `channels add` here (it has proven flaky across builds); write config directly.
         const token = payload.telegramToken.trim();
-        const cfgObj = {
-          enabled: true,
-          dmPolicy: "pairing",
-          botToken: token,
-          groupPolicy: "allowlist",
-          streamMode: "partial",
-        };
-        const set = await runCmd(
-          OPENCLAW_NODE,
-          clawArgs(["config", "set", "--json", "channels.telegram", JSON.stringify(cfgObj)]),
-        );
-        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.telegram"]));
+        // Stronger validation: require at least 5 digits before ':' and 10+ chars after
+        if (!/^\d{5,}:[A-Za-z0-9_-]{10,}$/.test(token)) {
+          extra += "\n[telegram] skipped: invalid bot token format (looks truncated). Expected like 123456789:AAHk...\n";
+        } else {
+          // Avoid `channels add` here (it has proven flaky across builds); write config directly.
+          const cfgObj = {
+            enabled: true,
+            dmPolicy: "pairing",
+            botToken: token,
+            groupPolicy: "allowlist",
+            streaming: true,
+          };
+          const set = await runCmd(
+            OPENCLAW_NODE,
+            clawArgs(["config", "set", "--json", "channels.telegram", JSON.stringify(cfgObj)]),
+          );
+          const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.telegram"]));
 
-        // Best-effort: enable the telegram plugin explicitly (some builds require this even when configured).
-        const plug = await runCmd(OPENCLAW_NODE, clawArgs(["plugins", "enable", "telegram"]));
+          // Best-effort: enable the telegram plugin explicitly (some builds require this even when configured).
+          const plug = await runCmd(OPENCLAW_NODE, clawArgs(["plugins", "enable", "telegram"]));
 
-        extra += `\n[telegram config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-        extra += `\n[telegram verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
-        extra += `\n[telegram plugin enable] exit=${plug.code} (output ${plug.output.length} chars)\n${plug.output || "(no output)"}`;
+          extra += `\n[telegram config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+          extra += `\n[telegram verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+          extra += `\n[telegram plugin enable] exit=${plug.code} (output ${plug.output.length} chars)\n${plug.output || "(no output)"}`;
+        }
       }
     }
 
@@ -1492,8 +1497,9 @@ app.post("/setup/api/console/run", requireSetupAuth, async (req, res) => {
     if (cmd === "channels.add.telegram") {
       const botToken = String(arg || "").trim();
       if (!botToken) return res.status(400).json({ ok: false, error: "Paste your Telegram bot token in the arg field (e.g. 123456789:AAHk...)" });
-      if (!/^\d+:[A-Za-z0-9_-]+$/.test(botToken)) {
-        return res.status(400).json({ ok: false, error: "Invalid Telegram bot token format. Expected: 123456789:AAHk..." });
+      // Stronger validation: require at least 5 digits before ':' and 10+ chars after
+      if (!/^\d{5,}:[A-Za-z0-9_-]{10,}$/.test(botToken)) {
+        return res.status(400).json({ ok: false, error: "Invalid Telegram bot token format (looks truncated). Expected like 123456789:AAHk..." });
       }
 
       let out = "";
