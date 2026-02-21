@@ -141,6 +141,59 @@ function isConfigured() {
   }
 }
 
+// Append Railway-specific persistence rules to AGENTS.md.
+// We never pre-create workspace files — OpenClaw's gateway seeds the stock
+// templates (BOOTSTRAP.md, AGENTS.md, SOUL.md, etc.) on first message, which
+// triggers the first-run onboarding conversation. Pre-creating AGENTS.md would
+// make OpenClaw think the workspace isn't new, skipping BOOTSTRAP.md entirely.
+//
+// Instead, we wait for AGENTS.md to appear (created by the gateway after the
+// user's first message) and then append the Railway persistence section.
+const PERSISTENCE_MARKER = "# Railway Deployment";
+const PERSISTENCE_TEMPLATE_PATH = path.join("/app", "templates", "RAILWAY-PERSISTENCE.md");
+let persistenceAppended = false;
+
+function tryAppendRailwayPersistence() {
+  if (persistenceAppended) return true;
+  const agentsMdPath = path.join(WORKSPACE_DIR, "AGENTS.md");
+  try {
+    if (!fs.existsSync(agentsMdPath)) return false;
+    const existing = fs.readFileSync(agentsMdPath, "utf8");
+    if (existing.includes(PERSISTENCE_MARKER)) {
+      persistenceAppended = true;
+      return true;
+    }
+    const template = fs.readFileSync(PERSISTENCE_TEMPLATE_PATH, "utf8");
+    fs.appendFileSync(agentsMdPath, "\n\n" + template, "utf8");
+    console.log(`[wrapper] appended Railway persistence rules to ${agentsMdPath}`);
+    persistenceAppended = true;
+    return true;
+  } catch (err) {
+    console.warn(`[wrapper] persistence append failed (non-fatal): ${err}`);
+    return false;
+  }
+}
+
+function appendRailwayPersistenceRules() {
+  // Try immediately (covers existing workspaces / redeploys).
+  if (tryAppendRailwayPersistence()) return;
+
+  // Fresh deploy: workspace doesn't exist yet. Poll until OpenClaw creates it
+  // after the user's first message triggers the bootstrap.
+  let attempts = 0;
+  const maxAttempts = 60; // ~10 minutes at 10s intervals
+  const interval = setInterval(() => {
+    attempts++;
+    if (tryAppendRailwayPersistence() || attempts >= maxAttempts) {
+      clearInterval(interval);
+      if (attempts >= maxAttempts && !persistenceAppended) {
+        console.warn("[wrapper] gave up waiting for AGENTS.md — persistence rules not appended");
+      }
+    }
+  }, 10_000);
+  interval.unref?.();
+}
+
 // One-time migration: rename legacy config files to openclaw.json so existing
 // deployments that still have the old filename on their volume keep working.
 (function migrateLegacyConfigFile() {
@@ -1689,30 +1742,13 @@ const server = app.listen(PORT, BIND_HOST, async () => {
     console.warn("[wrapper] WARNING: SETUP_PASSWORD is not set; /setup will error.");
   }
 
-  // Ensure the workspace AGENTS.md contains Railway persistence rules.
-  // OpenClaw's own bootstrap may create AGENTS.md first, so we append if the
-  // persistence section is missing rather than overwriting.
-  const agentsMdPath = path.join(WORKSPACE_DIR, "AGENTS.md");
-  const agentsMdTemplate = path.join("/app", "templates", "AGENTS.md");
-  const PERSISTENCE_MARKER = "# Railway Deployment";
-  try {
-    fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
-    if (fs.existsSync(agentsMdTemplate)) {
-      const templateContent = fs.readFileSync(agentsMdTemplate, "utf8");
-      if (!fs.existsSync(agentsMdPath)) {
-        fs.writeFileSync(agentsMdPath, templateContent, "utf8");
-        console.log(`[wrapper] seeded ${agentsMdPath} from template`);
-      } else {
-        const existing = fs.readFileSync(agentsMdPath, "utf8");
-        if (!existing.includes(PERSISTENCE_MARKER)) {
-          fs.appendFileSync(agentsMdPath, "\n\n" + templateContent, "utf8");
-          console.log(`[wrapper] appended persistence rules to ${agentsMdPath}`);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn(`[wrapper] failed to seed AGENTS.md: ${err}`);
-  }
+  // Append Railway persistence rules to AGENTS.md once OpenClaw creates it.
+  // We intentionally do NOT pre-create workspace files — OpenClaw's own
+  // bootstrap handles that (including BOOTSTRAP.md for first-run onboarding).
+  // Pre-creating AGENTS.md would prevent BOOTSTRAP.md from being generated,
+  // breaking the "who are you? / who am I?" first-message conversation.
+  fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+  appendRailwayPersistenceRules();
 
   // Optional operator hook to install/persist extra tools under /data.
   // This is intentionally best-effort and should be used to set up persistent

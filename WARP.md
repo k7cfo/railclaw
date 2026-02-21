@@ -13,7 +13,8 @@ A simplified fork of `vignesh07/clawdbot-railway-template` that deploys OpenClaw
 - `src/server.js`: Added automatic cleanup of orphaned gateway processes to prevent port conflicts and Telegram 401 errors
 - `src/setup-app.js`: Sends `braveApiKey` in setup payload
 - Added `scripts/deploy.sh` for one-command Railway deploy
-- Added `templates/AGENTS.md` for AI agent deploy instructions
+- `src/server.js`: Workspace files are NOT pre-seeded — OpenClaw's gateway handles bootstrap (BOOTSTRAP.md, AGENTS.md, SOUL.md, etc.) on first message, triggering the onboarding conversation
+- `src/server.js`: Railway persistence rules (`templates/RAILWAY-PERSISTENCE.md`) are appended to AGENTS.md after OpenClaw creates it (background poller)
 - Added `docs/TELEGRAM.md` for comprehensive Telegram setup and troubleshooting
 - Added `docs/TROUBLESHOOTING-401.md` for fixing 401 authentication errors
 - Removed Tailscale and Cloudflare Tunnel (not needed — Railway provides HTTPS)
