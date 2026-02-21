@@ -1,24 +1,37 @@
-# OpenClaw on Railway
+# OpenClaw on Railway — Always the Latest Stable Release
 
-Your own private AI assistant on Railway. HTTPS included, no tunnels needed.
+This is one of the few turnkey scripts that **automatically builds and deploys the latest stable release of OpenClaw** on Railway. No manual version tracking, no stale builds — run the deploy script and you get the newest release from GitHub, built from source, with HTTPS out of the box.
+
+- One command to deploy (`bash scripts/deploy.sh`)
+- Automatically fetches the latest stable OpenClaw tag from GitHub
+- Railway provides free HTTPS — no tunnels, no Cloudflare, no DNS config
+- Web-based setup wizard — paste your keys in a browser, done
+- Supports 12+ AI providers: OpenRouter, OpenAI, Anthropic, Google, and more
 
 ---
 
 ## Is a friend setting this up for you?
 
-If someone offered to deploy OpenClaw for you, you just need to get **2 API keys** and pick a **password**. Follow the steps below, then send all 3 things to your friend (use a secure method — not plain text over email).
+If someone offered to deploy OpenClaw for you, you just need **2 API keys** and a **password**. Follow the steps below.
 
-### 1. Get an OpenAI API key
+> **⚠️ Never send API keys over plain text.** No email, no SMS, no Discord DMs, no Slack. Use a secure method: **1Password shared vault, Signal disappearing messages, or in person.** API keys are like passwords — anyone who has them can use your account and run up charges.
 
-1. Go to **https://platform.openai.com/signup** and create an account
-2. Add billing credits ($5–10 is plenty to start):
-   - https://platform.openai.com/settings/organization/billing
+### 1. Get an OpenRouter API key
+
+OpenRouter gives you access to all the best AI models (GPT-4o, Claude, Gemini, Llama, and more) through a single API key. Pay-per-use, no subscriptions.
+
+1. Go to **https://openrouter.ai** and sign up (Google or GitHub login works)
+2. Add credits:
+   - Go to https://openrouter.ai/settings/credits
+   - Add **$5–10** to start (you only pay for what you use)
 3. Create an API key:
-   - Go to https://platform.openai.com/api-keys
-   - Click **Create new secret key** → copy it
-   - **Save this key** — you can't view it again
+   - Go to https://openrouter.ai/settings/keys
+   - Click **Create Key** → name it (e.g. `openclaw`) → copy it
+   - **Save this key** — you'll need it for the setup wizard
 
 ### 2. Get a Brave Search API key
+
+This lets your AI assistant search the web.
 
 1. Go to **https://brave.com/search/api/** and click **Get Started**
 2. Create an account and pick the **Free** plan (2,000 queries/month)
@@ -28,15 +41,22 @@ If someone offered to deploy OpenClaw for you, you just need to get **2 API keys
 
 ### 3. Pick a setup password
 
-Choose any password you'll remember. This protects the `/setup` admin page where you'll paste your keys.
+Choose any password you'll remember. This protects the `/setup` admin page where you paste your keys.
 
-### 4. Send these to your friend
+### 4. Send these to your friend — securely!
 
-Send these **3 things** securely (e.g. 1Password, Signal, in person):
+Send these **3 things** using a **secure method only**:
 
-- Your **OpenAI API key**
+- Your **OpenRouter API key**
 - Your **Brave Search API key**
 - Your **setup password**
+
+**Good ways to share:**
+- 🔒 1Password / Bitwarden shared vault
+- 🔒 Signal (with disappearing messages on)
+- 🔒 In person / on paper
+
+**Never use:** email, SMS, Discord, Slack, or any unencrypted channel.
 
 Your friend will deploy it and send you a URL like `https://yourapp.up.railway.app`. Visit `/setup` at that URL, log in with username **admin** and your password, paste your keys, and you're done.
 
@@ -94,8 +114,9 @@ After it finishes:
 2. Wait for the build (~3–5 min)
 3. Visit `https://yourapp.up.railway.app/setup`
 4. Log in: username **admin**, password = `SETUP_PASSWORD`
-5. Paste OpenAI key, Brave Search key, optional chat bot token
-6. Click **Run setup**
+5. Select **OpenRouter** as provider, paste your OpenRouter API key
+6. Paste Brave Search key, optional chat bot token
+7. Click **Run setup**
 
 ### Manual deploy (without the script)
 
@@ -141,7 +162,7 @@ Optional: create `/data/workspace/bootstrap.sh` to auto-install tools on startup
 
 - **HTTPS everywhere** — Railway provides TLS on all `.up.railway.app` domains. No plain HTTP.
 - **Setup wizard is password-protected** — `/setup` requires HTTP Basic Auth (admin + `SETUP_PASSWORD`).
-- **API keys stay on the server** — OpenAI and Brave Search keys are saved to the persistent volume, never exposed in env vars or logs.
+- **API keys stay on the server** — OpenRouter and Brave Search keys are saved to the persistent volume, never exposed in env vars or logs.
 - **No inbound ports** — Railway routes traffic through its edge proxy. Your container is not directly reachable.
 
 ### Make your instance private (only visible to you)
