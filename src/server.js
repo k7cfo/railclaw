@@ -1951,6 +1951,9 @@ const server = app.listen(PORT, BIND_HOST, async () => {
   //    from its own stock templates on first message.
   // 3. Railway persistence rules are appended to AGENTS.md after OpenClaw creates it.
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+  // Pre-create the memory directory so the memory flush tool doesn't ENOENT
+  // when writing daily notes (memory/YYYY-MM-DD.md).
+  try { fs.mkdirSync(path.join(WORKSPACE_DIR, "memory"), { recursive: true }); } catch {}
   seedCustomBootstrap();
   appendRailwayPersistenceRules();
 
